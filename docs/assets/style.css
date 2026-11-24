@@ -211,3 +211,8 @@ dialog::backdrop { background: #32231995; }
   .phone-pick { display: inline; }
   .desktop-pick { display: none; }
 }
+
+.crop-note { grid-column: 1 / -1; color: var(--soft); }
+.position { grid-template-columns: minmax(0, 1fr); }
+.position [aria-disabled="true"] { color: var(--soft); cursor: default; }
+#corner-preview { display: block; max-width: 100%; height: auto; margin-top: .5rem; }

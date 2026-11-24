@@ -14,9 +14,9 @@
   <meta property="og:description" content="36 款免费相框，选照片、挑相框、保存。照片留在自己的设备上。">
   <meta property="og:url" content="https://img.hackx64.eu.org/">
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./assets/style.css?v=5">
+  <link rel="stylesheet" href="./assets/style.css?v=6">
   <link rel="preload" as="image" href="./assets/example.webp" type="image/webp">
-  <script type="module" src="./assets/app.js?v=5"></script>
+  <script type="module" src="./assets/app.js?v=6"></script>
 </head>
 <body>
   <svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -82,12 +82,20 @@
                 <option value="contain">显示整张照片</option>
                 <option value="cover">铺满相框</option>
               </select>
-              <div class="position" id="position" hidden>
-                <label for="offset-x">左右位置</label><input type="range" id="offset-x" min="0" max="100" value="50">
-                <label for="offset-y">上下位置</label><input type="range" id="offset-y" min="0" max="100" value="50">
+              <p class="crop-note" id="crop-note" hidden>铺满相框会剪掉照片的一部分。</p>
+              <div class="position" id="position" hidden aria-label="微调照片的位置">
+                <div class="adjust-actions" id="position-x">
+                  <button type="button" class="button secondary" data-axis="x" data-step="10">向左移</button>
+                  <button type="button" class="button secondary" data-axis="x" data-step="-10">向右移</button>
+                </div>
+                <div class="adjust-actions" id="position-y">
+                  <button type="button" class="button secondary" data-axis="y" data-step="10">向上移</button>
+                  <button type="button" class="button secondary" data-axis="y" data-step="-10">向下移</button>
+                </div>
               </div>
               <div class="adjust-actions">
                 <button type="button" class="button secondary" id="rotate">顺时针旋转</button>
+                <button type="button" class="button secondary" id="undo" disabled>撤销上一步</button>
                 <button type="button" class="button secondary" id="reset">恢复默认</button>
               </div>
             </div>
@@ -147,6 +155,11 @@
     <div class="dialog-inner">
       <h2 id="frame-dialog-title">相框预览</h2>
       <canvas id="frame-preview" role="img" aria-label="全图预览"></canvas>
+      <details id="frame-detail" hidden>
+        <summary>看看相框花纹</summary>
+        <p>下图是单独放大的框角。上方是实际成品的完整预览。</p>
+        <canvas id="corner-preview" role="img" aria-label="相框左上角花纹参考"></canvas>
+      </details>
       <form method="dialog"><button class="button primary" autofocus>返回挑相框</button></form>
     </div>
   </dialog>

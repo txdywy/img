@@ -26,6 +26,7 @@ let image = null;
 let isUserPhoto = false;
 let selected = frames[0];
 let options = {...defaults};
+const adjustmentHistory = [];
 let category = 'all';
 let expanded = false;
 let importVersion = 0;
@@ -235,6 +236,7 @@ async function importPhoto(file) {
     image = photo;
     isUserPhoto = true;
     options = {...defaults};
+    adjustmentHistory.length = 0;
     syncOptions();
     $('preview-label').textContent = '我的照片';
     $('pick-text').textContent = '换一张照片';
@@ -297,40 +299,50 @@ stage.addEventListener('drop', event => {
 function syncOptions() {
   $('ratio').value = options.ratio;
   $('fit').value = options.fit;
-  $('position').hidden = options.fit !== 'cover';
-  $('offset-x').value = String(options.x * 100);
-  $('offset-y').value = String(options.y * 100);
+  const photoRatio = image && aspectRatio(image, {...options, ratio: 'original'});
+  const frameRatio = image && aspectRatio(image, options);
+  const crop = options.fit === 'cover' && photoRatio && Math.abs(Math.log(photoRatio / frameRatio)) > .001;
+  $('crop-note').hidden = !crop;
+  $('position').hidden = !crop;
+  $('position-x').hidden = !crop || photoRatio < frameRatio;
+  $('position-y').hidden = !crop || photoRatio > frameRatio;
+  $('undo').disabled = adjustmentHistory.length === 0;
+  for (const button of $('position').querySelectorAll('button')) {
+    const value = options[button.dataset.axis];
+    const atEdge = Number(button.dataset.step) > 0 ? value >= 1 : value <= 0;
+    button.setAttribute('aria-disabled', String(atEdge));
+  }
 }
 
-$('ratio').addEventListener('change', event => {
-  options.ratio = event.target.value;
-  requestPreview();
-  refreshGalleryPreviews();
-});
-$('fit').addEventListener('change', event => {
-  options.fit = event.target.value;
-  syncOptions();
-  requestPreview();
-  refreshGalleryPreviews();
-});
-for (const axis of ['x', 'y']) {
-  const slider = $('offset-' + axis);
-  slider.addEventListener('change', refreshGalleryPreviews);
-  slider.addEventListener('input', event => {
-    options[axis] = Number(event.target.value) / 100;
-    requestPreview();
-  });
+function applyAdjustment(next) {
+  if (Object.keys(next).every(key => next[key] === options[key])) return;
+  adjustmentHistory.push(options);
+  if (adjustmentHistory.length > 30) adjustmentHistory.shift();
+  options = {...options, ...next};
+  redrawAdjustment();
 }
-$('rotate').addEventListener('click', () => {
-  options.rotation = (options.rotation + 90) % 360;
-  requestPreview();
-  refreshGalleryPreviews();
-});
-$('reset').addEventListener('click', () => {
-  options = {...defaults};
+
+function redrawAdjustment() {
   syncOptions();
   requestPreview();
   refreshGalleryPreviews();
+}
+
+$('ratio').addEventListener('change', event => applyAdjustment({ratio: event.target.value}));
+$('fit').addEventListener('change', event => applyAdjustment({fit: event.target.value}));
+$('position').addEventListener('click', event => {
+  const button = event.target.closest('button[data-axis]');
+  if (!button || button.getAttribute('aria-disabled') === 'true') return;
+  const {axis, step} = button.dataset;
+  const value = Math.max(0, Math.min(100, Math.round(options[axis] * 100) + Number(step)));
+  applyAdjustment({[axis]: value / 100});
+});
+$('rotate').addEventListener('click', () => applyAdjustment({rotation: (options.rotation + 90) % 360}));
+$('reset').addEventListener('click', () => applyAdjustment(defaults));
+$('undo').addEventListener('click', () => {
+  options = adjustmentHistory.pop();
+  redrawAdjustment();
+  if ($('undo').disabled) $('rotate').focus();
 });
 
 function encode(canvas) {
@@ -416,6 +428,16 @@ viewFrame.addEventListener('click', () => {
   const [width, height] = dimensions(image, options, 1200);
   paint(canvas, image, selected, options, width, height);
   canvas.setAttribute('aria-label', selected.name + '相框全图预览');
+  const detail = $('frame-detail');
+  detail.hidden = Math.max(width / height, height / width) < 3;
+  detail.open = false;
+  if (!detail.hidden) {
+    const swatch = document.createElement('canvas');
+    paint(swatch, null, selected, defaults, 600, 600);
+    const corner = $('corner-preview');
+    corner.width = corner.height = 180;
+    corner.getContext('2d').drawImage(swatch, 0, 0, 180, 180, 0, 0, 180, 180);
+  }
   if (typeof frameDialog.showModal === 'function') frameDialog.showModal();
   else {
     frameDialog.setAttribute('open', '');
@@ -442,6 +464,7 @@ $('stage-placeholder').hidden = false;
 loadImage(new URL('./example.webp', import.meta.url).href).then(sample => {
   if (isUserPhoto) return;
   image = sample;
+  syncOptions();
   refreshGalleryPreviews();
   requestPreview();
 }).catch(() => {
