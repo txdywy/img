@@ -16,7 +16,7 @@
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./assets/style.css?v=2">
   <link rel="preload" as="image" href="./assets/example.webp" type="image/webp">
-  <script type="module" src="./assets/app.js?v=2"></script>
+  <script type="module" src="./assets/app.js?v=3"></script>
 </head>
 <body>
   <svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -104,8 +104,8 @@
         <button class="more" type="button" id="more" aria-controls="frames" aria-expanded="false" hidden>查看更多相框 <span class="chevron" aria-hidden="true"></span></button>
         <div class="save-area" aria-labelledby="save-title">
           <h2 id="save-title"><span class="step">3</span> 保存照片</h2>
-          <button class="button save" type="button" id="save" disabled><svg class="icon"><use href="#i-save"/></svg> <span id="save-text">保存照片</span></button>
-          <p class="save-hint" id="save-hint">选好自己的照片，就可以保存了</p>
+          <button class="button save" type="button" id="save" disabled><svg class="icon"><use href="#i-save"/></svg> <span id="save-text">做好这张照片</span></button>
+          <p class="save-hint" id="save-hint">先选一张自己的照片</p>
         </div>
       </section>
     </section>
@@ -120,7 +120,7 @@
       <ol>
         <li>点「选我的照片」，从相册或文件里选一张。</li>
         <li>点喜欢的相框。默认保留整张照片和原图比例，长图也能套框。展开「调整照片」可以改比例或旋转。</li>
-        <li>点「保存照片」。手机或平板上，也可以在保存窗口长按成品，选择存储图片。</li>
+        <li>点「做好这张照片」，再在成品窗口点「下载照片」。</li>
       </ol>
       <p>照片处理都在这台设备上完成。遇到打不开的照片，可以在相册里另存为 JPG 或 PNG，再选一次。</p>
       <form method="dialog"><button class="button primary">我知道了</button></form>
@@ -142,13 +142,19 @@
   <dialog id="result-dialog" aria-labelledby="result-title">
     <div class="dialog-inner">
       <h2 id="result-title">相框照片做好了</h2>
-      <p>可以下载，也可以长按下方照片存到相册。</p>
+      <p>还差一步。点「下载照片」，把成品存到设备。</p>
       <img id="result-image" alt="加好相框的成品照片">
       <div class="result-actions">
         <a class="button primary" id="result-download" download><svg class="icon"><use href="#i-save"/></svg> 下载照片</a>
-        <button class="button secondary" id="share" type="button" hidden>分享或存到相册</button>
+        <button class="button secondary" id="share" type="button" hidden>打开系统分享菜单</button>
       </div>
-      <p class="status" id="share-status" role="status" hidden></p>
+      <p class="status" id="share-status" role="status"></p>
+      <details>
+        <summary>找不到照片？</summary>
+        <p>下载后，请到浏览器的「下载」列表或设备的「下载」文件夹找这张照片。iPhone 上也可以在「文件」里找「下载项」。</p>
+        <p>想存进相册时，可以打开下载的图片，再从系统菜单选择「存储图像」或类似选项。手机浏览器如果支持，也可以长按上面的成品，选择保存图片。</p>
+        <p>如果微信里无法下载，可用右上角菜单在浏览器打开。请在离开前尝试保存，在新浏览器中需重新选图套框。</p>
+      </details>
       <form method="dialog"><button class="button secondary">继续编辑</button></form>
     </div>
   </dialog>

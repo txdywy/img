@@ -20,7 +20,7 @@ const listSize = 6;
 const maxImportSize = 50 * 1024 * 1024;
 const exportEdge = 4096;
 const exportPixels = 16_000_000;
-const filename = '拾光相框.jpg';
+let exportNumber = 0;
 
 let image = null;
 let isUserPhoto = false;
@@ -45,8 +45,8 @@ function showStatus(message, error = false) {
 
 function updateSave() {
   save.disabled = !isUserPhoto || reading || exporting;
-  $('save-text').textContent = exporting ? '正在制作…' : '保存照片';
-  $('save-hint').textContent = isUserPhoto ? '保存为高清 JPG 照片' : '选好自己的照片，就可以保存了';
+  $('save-text').textContent = exporting ? '正在制作…' : '做好这张照片';
+  $('save-hint').textContent = isUserPhoto ? '先看成品，再下载保存' : '先选一张自己的照片';
 }
 
 function fitPreview() {
@@ -334,7 +334,7 @@ function clearResult() {
   if (resultUrl) URL.revokeObjectURL(resultUrl);
   $('result-image').removeAttribute('src');
   $('result-download').removeAttribute('href');
-  $('share-status').hidden = true;
+  $('share-status').textContent = '';
   resultUrl = '';
   resultFile = null;
 }
@@ -355,10 +355,12 @@ save.addEventListener('click', async () => {
     resultUrl = URL.createObjectURL(blob);
     $('result-image').src = resultUrl;
     $('result-download').href = resultUrl;
+    const filename = `拾光相框-${new Date().toISOString().replace(/[:.]/g, '-')}-${++exportNumber}.jpg`;
     $('result-download').download = filename;
     if (typeof File === 'function') resultFile = new File([blob], filename, {type: blob.type});
     $('share').hidden = !(resultFile && navigator.canShare?.({files: [resultFile]}));
-    resultDialog.showModal();
+    if (typeof resultDialog.showModal === 'function') resultDialog.showModal();
+    else resultDialog.setAttribute('open', '');
     track('photo_exported');
   } catch {
     showStatus('这次没有生成照片。请试试换一张较小的照片。', true);
@@ -371,15 +373,27 @@ save.addEventListener('click', async () => {
   }
 });
 
+$('result-download').addEventListener('click', () => {
+  $('share-status').textContent = '请打开浏览器的「下载」列表查看进度和文件。';
+  track('photo_download_clicked');
+});
+
 $('share').addEventListener('click', async () => {
   const message = $('share-status');
   try {
     await navigator.share({files: [resultFile]});
+    track('photo_share_completed');
   } catch (error) {
     if (error.name === 'AbortError') return;
     message.textContent = '无法打开分享菜单。请试试下载或长按照片。';
-    message.hidden = false;
+
   }
+});
+resultDialog.querySelector('form').addEventListener('submit', event => {
+  if (typeof resultDialog.close === 'function') return;
+  event.preventDefault();
+  resultDialog.removeAttribute('open');
+  save.focus();
 });
 resultDialog.addEventListener('close', () => {
   save.focus({preventScroll: true});
