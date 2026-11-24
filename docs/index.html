@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fcf8f1">
+  <meta name="description" content="拾光相框，免费的在线照片相框。选照片、挑相框、保存到设备，所有处理都在浏览器内完成。">
+  <title>拾光相框 · 为喜欢的照片，挑一款相框</title>
+  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./assets/style.css">
+  <script type="module" src="./assets/app.js"></script>
+</head>
+<body>
+  <svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-brand" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m5 17 5-5 3 3 2-2 4 4"/><circle cx="15.5" cy="8.5" r="1.5"/></symbol>
+    <symbol id="i-photo" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m4 17 6-6 4 4 2-2 4 4"/><circle cx="16" cy="8" r="1"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4.4 1.6c-.8.8-1.9 1.2-1.9 2.4m0 3h.01"/></symbol>
+    <symbol id="i-adjust" viewBox="0 0 24 24"><path d="M3 7h6m4 0h8M3 17h9m4 0h5M9 4v6m7 4v6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  </svg>
+  <a class="skip" href="#editor">跳到相框工具</a>
+  <header class="top">
+    <div class="shell top-inner">
+      <a class="brand" href="./" aria-label="拾光相框首页">
+        <span class="brand-mark"><svg><use href="#i-brand"/></svg></span>
+        <span>拾光相框</span>
+      </a>
+      <button class="help-button" type="button" id="help-open"><svg class="icon"><use href="#i-help"/></svg> 使用帮助</button>
+    </div>
+  </header>
+  <main class="shell">
+    <section class="intro" aria-labelledby="title">
+      <div class="intro-copy">
+        <h1 id="title">给照片，<span>加个相框</span></h1>
+        <p>花开、出游、团圆，把喜欢的瞬间好好收藏。</p>
+      </div>
+      <div class="privacy"><svg class="icon"><use href="#i-lock"/></svg><span>永久免费 · 照片留在本机</span></div>
+    </section>
+
+    <section class="workspace" id="editor" aria-label="相框工具">
+      <section class="panel photo-panel" aria-labelledby="photo-title">
+        <header class="panel-head">
+          <h2 id="photo-title"><span class="step">1</span> 选张照片</h2>
+          <span class="preview-label" id="preview-label">示例预览</span>
+        </header>
+        <div class="stage" id="stage">
+          <canvas id="preview" width="640" height="480" role="img" aria-label="照片加相框预览"></canvas>
+          <span class="stage-placeholder" id="stage-placeholder" hidden>选一张照片，就能在这里看到套框效果</span>
+        </div>
+        <div class="photo-controls">
+          <div class="photo-actions">
+            <button class="button primary" type="button" id="pick"><svg class="icon"><use href="#i-photo"/></svg> <span id="pick-text">选我的照片</span></button>
+            <input id="file" type="file" accept="image/*,.heic,.heif" hidden>
+            <span class="file-hint" id="file-hint">支持 JPG、PNG、WebP 等</span>
+          </div>
+          <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+          <details class="adjust" id="adjust">
+            <summary><svg class="icon"><use href="#i-adjust"/></svg> 调整照片 <span class="chevron" aria-hidden="true"></span></summary>
+            <div class="adjust-body">
+              <label for="ratio">成品比例</label>
+              <select id="ratio">
+                <option value="original">跟随原图</option>
+                <option value="1">正方形 1∶1</option>
+                <option value="0.75">竖图 3∶4</option>
+                <option value="0.5625">竖屏 9∶16</option>
+                <option value="1.3333333333333333">横图 4∶3</option>
+                <option value="1.7777777777777777">宽屏 16∶9</option>
+              </select>
+              <label for="fit">照片放置</label>
+              <select id="fit">
+                <option value="contain">显示整张照片</option>
+                <option value="cover">铺满相框</option>
+              </select>
+              <div class="position" id="position" hidden>
+                <label for="offset-x">左右位置</label><input type="range" id="offset-x" min="0" max="100" value="50">
+                <label for="offset-y">上下位置</label><input type="range" id="offset-y" min="0" max="100" value="50">
+              </div>
+              <div class="adjust-actions">
+                <button type="button" class="button secondary" id="rotate">顺时针旋转</button>
+                <button type="button" class="button secondary" id="reset">恢复默认</button>
+              </div>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section class="panel frames-panel" aria-labelledby="frame-title">
+        <header class="panel-head">
+          <h2 id="frame-title"><span class="step">2</span> 挑个相框</h2>
+          <span class="frame-count" id="frame-count"></span>
+        </header>
+        <div class="filters" id="filters" role="group" aria-label="相框分类"></div>
+        <div class="frame-grid" id="frames" role="group" aria-label="相框款式"></div>
+        <button class="more" type="button" id="more" aria-controls="frames" aria-expanded="false" hidden>查看更多相框 <span class="chevron" aria-hidden="true"></span></button>
+        <div class="save-area" aria-labelledby="save-title">
+          <h2 id="save-title"><span class="step">3</span> 保存照片</h2>
+          <button class="button save" type="button" id="save" disabled><svg class="icon"><use href="#i-save"/></svg> <span id="save-text">保存照片</span></button>
+          <p class="save-hint" id="save-hint">选好自己的照片，就可以保存了</p>
+        </div>
+      </section>
+    </section>
+    <noscript><p class="status error">请在浏览器中开启 JavaScript，再使用相框工具。</p></noscript>
+  </main>
+
+  <footer class="shell footer"><span>拾光相框</span><span>免费使用 · 无需登录 · 无水印</span><button class="help-button" type="button" id="analytics-open" hidden>访问统计设置</button></footer>
+
+  <dialog id="help-dialog" aria-labelledby="help-title">
+    <div class="dialog-inner">
+      <h2 id="help-title">怎样给照片加相框？</h2>
+      <ol>
+        <li>点「选我的照片」，从相册或文件里选一张。</li>
+        <li>点喜欢的相框。展开「调整照片」可以改比例或旋转。</li>
+        <li>点「保存照片」。手机或平板上，也可以在保存窗口长按成品，选择存储图片。</li>
+      </ol>
+      <p>照片处理都在这台设备上完成。遇到打不开的照片，可以在相册里另存为 JPG 或 PNG，再选一次。</p>
+      <form method="dialog"><button class="button primary">我知道了</button></form>
+    </div>
+  </dialog>
+
+  <dialog id="analytics-dialog" aria-labelledby="analytics-title">
+    <div class="dialog-inner">
+      <h2 id="analytics-title">访问统计设置</h2>
+      <p>如果你愿意，可以允许 Google Analytics 统计页面访问和功能使用次数。选入的照片和文件名始终留在你的设备上。</p>
+      <label class="analytics-choice"><input type="checkbox" id="analytics-choice"> 允许访问统计</label>
+      <div class="result-actions">
+        <button class="button primary" id="analytics-save" type="button">保存设置</button>
+        <form method="dialog"><button class="button secondary">取消</button></form>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="result-dialog" aria-labelledby="result-title">
+    <div class="dialog-inner">
+      <h2 id="result-title">相框照片做好了</h2>
+      <p>可以下载，也可以长按下方照片存到相册。</p>
+      <img id="result-image" alt="加好相框的成品照片">
+      <div class="result-actions">
+        <a class="button primary" id="result-download" download><svg class="icon"><use href="#i-save"/></svg> 下载照片</a>
+        <button class="button secondary" id="share" type="button" hidden>分享或存到相册</button>
+      </div>
+      <p class="status" id="share-status" role="status" hidden></p>
+      <form method="dialog"><button class="button secondary">继续编辑</button></form>
+    </div>
+  </dialog>
+</body>
+</html>
