@@ -176,3 +176,30 @@ dialog::backdrop { background: #32231995; }
   .frames-panel { --frame-scroll-margin: 9rem; }
   .save-area { position: sticky; top: 0; z-index: 1; }
 }
+
+.top-inner, .panel-head { flex-wrap: wrap; }
+.brand, .help-button, .privacy, .filter, .preview-label, .frame-count { white-space: normal; }
+.button, .help-button, .filter, .more, .adjust summary, .adjust-body select {
+  min-height: max(48px, 3rem);
+  min-width: 48px;
+}
+.filters, .frame-grid, .adjust-actions, .result-actions { gap: max(8px, .5rem); }
+.button, .more, .filter, .frame, .status, .save-hint { font-size: 1.125rem; }
+.button, .frame { overflow-wrap: anywhere; }
+.filters { display: flex; flex-wrap: wrap; }
+.filter { flex: 1 1 auto; padding-inline: .55rem; }
+.stage { min-width: 0; }
+.dialog-inner summary { padding-block: .6rem; cursor: pointer; }
+.dialog-inner details p + p { margin-top: .6rem; }
+.dialog-inner .status:empty { display: none; }
+@media (max-width: 46rem) {
+  .panel-head { margin-bottom: .65rem; }
+  .adjust-body { grid-template-columns: minmax(0, 1fr); }
+  .adjust-body select { width: 100%; }
+  .position { grid-template-columns: minmax(0, 1fr); }
+  .frame-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 5.6rem), 1fr)); }
+}
+@media (max-width: 16rem) or (max-height: 25rem) {
+  .save-area { position: static; }
+  .frames-panel { --frame-scroll-margin: 0px; }
+}
