@@ -216,3 +216,15 @@ dialog::backdrop { background: #32231995; }
 .position { grid-template-columns: minmax(0, 1fr); }
 .position [aria-disabled="true"] { color: var(--soft); cursor: default; }
 #corner-preview { display: block; max-width: 100%; height: auto; margin-top: .5rem; }
+
+.retry-photo { margin-bottom: .75rem; }
+#status:empty, #save-status:empty, #share-status:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  display: block;
+  margin: 0;
+}
+dialog:not([open]) { display: none; }

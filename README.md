@@ -24,7 +24,11 @@ GitHub 仓库的 **Settings → Pages → Build and deployment** 使用 **Deploy
 
 自定义域名使用 `img.hackx64.eu.org`。先在 GitHub 的账号设置中验证域名，再在仓库 Pages 设置中填写自定义域名。Cloudflare DNS 中将 `img` 的 CNAME 指向 `txdywy.github.io`。验证并签发 GitHub Pages 证书时先用 DNS only，HTTPS 可用后启用 Cloudflare 代理，并通过匹配该主机名的 Configuration Rule 将源站 TLS 设为 Strict。静态文件使用 Cloudflare 默认缓存行为，HTML 保持可重新验证。参阅 [GitHub Pages 自定义域名](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site)。
 
-GA4 的 Web 数据流衡量 ID 配置在 `docs/assets/analytics.js`。统计只在生产域名且访客允许后运行，事件为 `page_view`、`photo_selected`、`frame_selected` 和 `photo_exported`。
+GA4 的 Web 数据流衡量 ID 配置在 `docs/assets/analytics.js`。统计只在生产域名且访客允许后运行，记录页面访问、选图、选框、生成成品、点击下载和系统分享操作。网站可观察到的最后一步取决于浏览器，用户能否在相册或下载文件夹找回成品由真机测试验证。
+
+## 验证保存流程
+
+在鸿蒙浏览器、Android Chrome、iPhone Safari 和微信内置浏览器各用一张测试合影走一遍：打开网站、选图、挑选两款相框、确认两端人物完整、保存、退出网页、从设备中找到并打开成品。记录设备、浏览器版本和实际保存位置。换图失败后再验证一次重试。平板覆盖横竖屏，电脑覆盖键盘操作。
 
 ## 设计参考
 

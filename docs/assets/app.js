@@ -41,7 +41,11 @@ let dragDepth = 0;
 function showStatus(message, error = false) {
   status.textContent = message;
   status.classList.toggle('error', error);
-  status.hidden = !message;
+  $('retry-photo').hidden = !error;
+}
+
+function showImportError(message) {
+  showStatus(message + (isUserPhoto ? ' 仍在使用上一张照片。' : ''), true);
 }
 
 function updateSave() {
@@ -217,9 +221,10 @@ async function readPhoto(file) {
 async function importPhoto(file) {
   if (!file) return;
   const version = ++importVersion;
+  $('save-status').textContent = '';
   if (file.size > maxImportSize) {
     reading = false;
-    showStatus('这张照片超过 50 MB。请先在相册里缩小，再选一次。', true);
+    showImportError('这张照片太大，请重新选一张较小的照片。');
     updateSave();
     return;
   }
@@ -247,7 +252,7 @@ async function importPhoto(file) {
     refreshGalleryPreviews();
     track('photo_selected');
   } catch {
-    if (version === importVersion) showStatus('这张照片打不开。请试试 JPG、PNG 或 WebP 照片。', true);
+    if (version === importVersion) showImportError('这张照片打不开。请试试另一张。');
   } finally {
     if (version === importVersion) {
       reading = false;
@@ -263,6 +268,7 @@ $('go-frames').addEventListener('click', () => {
 });
 
 $('pick').addEventListener('click', () => fileInput.click());
+$('retry-photo').addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => {
   const file = fileInput.files[0];
   fileInput.value = '';
@@ -363,7 +369,9 @@ function clearResult() {
 save.addEventListener('click', async () => {
   if (save.disabled || !image) return;
   exporting = true;
+  $('save-status').textContent = '';
   updateSave();
+  const version = importVersion;
   const photo = image;
   const frame = selected;
   const settings = {...options};
@@ -372,6 +380,7 @@ save.addEventListener('click', async () => {
     const [width, height] = dimensions(photo, settings, exportEdge, exportPixels);
     paint(canvas, photo, frame, settings, width, height);
     const blob = await encode(canvas);
+    if (version !== importVersion) return;
     clearResult();
     resultUrl = URL.createObjectURL(blob);
     $('result-image').src = resultUrl;
@@ -384,8 +393,7 @@ save.addEventListener('click', async () => {
     else resultDialog.setAttribute('open', '');
     track('photo_exported');
   } catch {
-    showStatus('这次没有生成照片。请试试换一张较小的照片。', true);
-    status.scrollIntoView({block: 'nearest'});
+    if (version === importVersion) $('save-status').textContent = '这次没做好。可以点上方按钮再试一次，或换一张较小的照片。';
   } finally {
     canvas.width = 1;
     canvas.height = 1;
@@ -453,7 +461,19 @@ frameDialog.querySelector('form').addEventListener('submit', event => {
 frameDialog.addEventListener('close', () => viewFrame.focus({preventScroll: true}));
 
 const help = $('help-dialog');
-$('help-open').addEventListener('click', () => help.showModal());
+$('help-open').addEventListener('click', () => {
+  if (typeof help.showModal === 'function') help.showModal();
+  else {
+    help.setAttribute('open', '');
+    help.querySelector('button').focus();
+  }
+});
+help.querySelector('form').addEventListener('submit', event => {
+  if (typeof help.close === 'function') return;
+  event.preventDefault();
+  help.removeAttribute('open');
+  $('help-open').focus();
+});
 help.addEventListener('close', () => $('help-open').focus({preventScroll: true}));
 
 if ('ResizeObserver' in window) new ResizeObserver(fitPreview).observe(stage);

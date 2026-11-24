@@ -14,9 +14,9 @@
   <meta property="og:description" content="36 款免费相框，选照片、挑相框、保存。照片留在自己的设备上。">
   <meta property="og:url" content="https://img.hackx64.eu.org/">
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./assets/style.css?v=6">
+  <link rel="stylesheet" href="./assets/style.css?v=7">
   <link rel="preload" as="image" href="./assets/example.webp" type="image/webp">
-  <script type="module" src="./assets/app.js?v=6"></script>
+  <script type="module" src="./assets/app.js?v=7"></script>
 </head>
 <body>
   <svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -59,7 +59,8 @@
             <span class="file-hint" id="file-hint">免费，会另存一张，原照片还在</span>
           <button class="button secondary" type="button" id="go-frames" hidden>去挑相框</button>
         </div>
-        <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+        <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
+        <button type="button" class="button secondary retry-photo" id="retry-photo" hidden>重新选照片</button>
         <div class="stage" id="stage">
           <canvas id="preview" width="640" height="480" role="img" aria-label="照片加相框预览"></canvas>
           <span class="stage-placeholder" id="stage-placeholder" hidden>选一张照片，就能在这里看到套框效果</span>
@@ -116,6 +117,7 @@
             <button class="button save" type="button" id="save" disabled><span id="save-text">做好这张照片</span></button>
           </div>
           <p class="save-hint" id="save-hint">先选一张自己的照片</p>
+          <p class="status error" id="save-status" role="status"></p>
         </div>
         <div class="frame-grid" id="frames" role="group" aria-label="相框款式"></div>
         <button class="more" type="button" id="more" aria-controls="frames" aria-expanded="false" hidden>查看更多相框 <span class="chevron" aria-hidden="true"></span></button>
