@@ -3,11 +3,15 @@ export const categories = [
   ['travel', '旅行'], ['memory', '纪念'],
 ];
 
-function frame(id, name, category, paper, ink, accent, detail, motif) {
-  return { id, name, category, paper, ink, accent, detail, motif };
+// caption: which words the frame can carry in its bottom border.
+function frame(id, name, category, paper, ink, accent, detail, motif, caption = '') {
+  return { id, name, category, paper, ink, accent, detail, motif, caption };
 }
 
 export const frames = [
+  frame('family', '全家福', 'memory', '#fbf6ee', '#5d4636', '#c8b08f', '#8f7963', 'family'),
+  frame('longevity', '福寿安康', 'festival', '#9b2a2c', '#f8d98f', '#e2b65c', '#c4473f', 'longevity', 'blessing'),
+  frame('trip', '出游纪念', 'travel', '#f6f0e3', '#3f5968', '#c9573f', '#3f6f9a', 'trip', 'travel'),
   frame('azalea', '花开富贵', 'flowers', '#fff4e8', '#944253', '#d56c83', '#62765c', 'peony'),
   frame('ivory', '奶油留白', 'classic', '#fff7e9', '#987c5e', '#dbcbb0', '#c0a481', 'plain'),
   frame('jade', '青瓷如意', 'classic', '#e2eee5', '#41675a', '#8da699', '#b2c7b1', 'lattice'),
@@ -16,7 +20,7 @@ export const frames = [
   frame('postcard', '山水来信', 'travel', '#eaf2f0', '#4b6b66', '#779490', '#bdcfc6', 'mountain'),
   frame('cherry', '樱花细语', 'flowers', '#fdf1ed', '#9e5761', '#d0808f', '#a4715f', 'blossom'),
   frame('lotus', '荷塘月色', 'flowers', '#edf1e9', '#466b68', '#b97f97', '#64917b', 'lotus'),
-  frame('plum', '梅开五福', 'flowers', '#fff0e8', '#974454', '#ba4864', '#764d3b', 'blossom'),
+  frame('plum', '梅开五福', 'flowers', '#fff0e8', '#974454', '#ba4864', '#5b3a2c', 'plum'),
   frame('osmanthus', '桂香满园', 'flowers', '#fff0cf', '#795726', '#ce9428', '#6b7745', 'osmanthus'),
   frame('camellia', '山茶花开', 'flowers', '#f9e8dc', '#7b3849', '#b34c64', '#427158', 'rose'),
   frame('magnolia', '玉兰清芬', 'flowers', '#f2efef', '#655669', '#c59ba9', '#656d5a', 'lotus'),
@@ -30,7 +34,7 @@ export const frames = [
   frame('lantern', '灯火团圆', 'festival', '#8b2333', '#fff0c4', '#f6b255', '#d76052', 'lantern'),
   frame('moon', '花好月圆', 'festival', '#293b61', '#fff0bd', '#e8ba69', '#8796b1', 'moon'),
   frame('lantern-blue', '元夕花灯', 'festival', '#2f5263', '#ffe8b8', '#ffc470', '#b96a62', 'lantern'),
-  frame('birthday', '生日快乐', 'festival', '#f9e2df', '#903e59', '#d56c83', '#bf873f', 'confetti'),
+  frame('birthday', '生日快乐', 'festival', '#f9e2df', '#903e59', '#d56c83', '#bf873f', 'confetti', 'birthday'),
   frame('double-happiness', '喜事成双', 'festival', '#8e2330', '#fbe6ac', '#dfac50', '#f27761', 'gilt'),
   frame('autumn', '秋日远足', 'travel', '#f2e2c8', '#755038', '#b16a41', '#7a7555', 'mountain'),
   frame('sea', '海风假日', 'travel', '#dbeef0', '#38636d', '#719fa7', '#6ab0ba', 'waves'),

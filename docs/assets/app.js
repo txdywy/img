@@ -1,7 +1,7 @@
-import {frames, categories, byId} from './frames.js?v=8';
-import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=8';
-import {setupAnalytics, track} from './analytics.js?v=8';
-import {openDialog} from './dialog.js?v=8';
+import {frames, categories, byId} from './frames.js?v=9';
+import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=9';
+import {setupAnalytics, track} from './analytics.js?v=9';
+import {openDialog} from './dialog.js?v=9';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -49,6 +49,29 @@ let pan = null;
 let resultUrl = '';
 let resultFile = null;
 let dragDepth = 0;
+let unsaved = false;
+let zoomed = false;
+const today = new Date();
+const captions = {
+  blessing: {on: true, text: '福如东海 · 寿比南山'},
+  birthday: {on: true, text: '生日快乐'},
+  travel: {on: true, text: '', date: `${today.getFullYear()}.${today.getMonth() + 1}.${today.getDate()}`},
+};
+const captionLabels = {
+  blessing: {toggle: '加一句祝福', text: '祝福语', placeholder: '福如东海 · 寿比南山'},
+  birthday: {toggle: '加上祝福文字', text: '文字', placeholder: '生日快乐'},
+  travel: {toggle: '写上地点和日期', text: '地点', placeholder: '例如：杭州西湖'},
+};
+
+function captionFor(frame) {
+  const state = captions[frame.caption];
+  if (!state?.on) return '';
+  if (frame.caption === 'travel') return [state.text.trim(), state.date.trim()].filter(Boolean).join('  ·  ');
+  return state.text.trim();
+}
+
+// The settings a frame is drawn with: the shared adjustments plus its own words.
+const look = (frame, base = options) => ({...base, text: captionFor(frame)});
 
 const pixelRatio = () => Math.min(2, Math.max(1, window.devicePixelRatio || 1));
 const clamp = value => Math.max(0, Math.min(1, value));
@@ -126,8 +149,9 @@ function drawMini() {
 function drawPreview() {
   if (!image || !previewDirty) return;
   previewDirty = false;
-  previewLayout = layout(image, selected, options, previewEdge);
-  paint(preview, previewSource, selected, options, previewLayout);
+  const settings = look(selected);
+  previewLayout = layout(image, selected, settings, previewEdge);
+  paint(preview, previewSource, selected, settings, previewLayout);
   preview.setAttribute('aria-label', `${isUserPhoto ? '照片' : '示例照片'}预览，${selected.name}相框`);
   preview.hidden = false;
   viewFrame.disabled = false;
@@ -164,18 +188,21 @@ function drawTile(canvas, frame) {
   const scale = pixelRatio();
   if (!isUserPhoto) {
     canvas.style.width = '';
-    paint(canvas, thumbSource, frame, {...defaults, rotation: options.rotation},
-      fixedLayout(frame, tileWidth * scale, tileHeight * scale));
+    const text = captionFor(frame);
+    paint(canvas, thumbSource, frame, {...defaults, rotation: options.rotation, text},
+      fixedLayout(frame, tileWidth * scale, tileHeight * scale, text));
     return;
   }
-  const tile = layoutInBox(thumbSource, frame, options, tileWidth * scale, tileHeight * scale);
+  const settings = look(frame);
+  const tile = layoutInBox(thumbSource, frame, settings, tileWidth * scale, tileHeight * scale);
   canvas.style.width = `${100 * tile.width / (tileWidth * scale)}%`;
-  paint(canvas, thumbSource, frame, options, tile);
+  paint(canvas, thumbSource, frame, settings, tile);
 }
 
-function refreshGalleryPreviews() {
+function refreshGalleryPreviews(kind = '') {
   for (const button of grid.children) {
-    drawTile(button.querySelector('canvas'), byId.get(button.dataset.frame));
+    const frame = byId.get(button.dataset.frame);
+    if (!kind || frame.caption === kind) drawTile(button.querySelector('canvas'), frame);
   }
 }
 
@@ -215,6 +242,7 @@ function drawGallery() {
   }
   grid.replaceChildren(entries);
   updateFrameSelection();
+  updatePin();
 }
 
 filters.addEventListener('click', event => {
@@ -231,6 +259,7 @@ grid.addEventListener('click', event => {
   if (!button) return;
   selected = byId.get(button.dataset.frame);
   updateFrameSelection();
+  syncCaption();
   syncOptions();
   requestPreview();
   track('frame_selected');
@@ -283,6 +312,18 @@ async function readPhoto(file) {
   }
 }
 
+// HEIC and HEIF photos start with an ISO media box whose brand names the format.
+async function isHeic(file) {
+  if (/\.(heic|heif)$/i.test(file.name || '') || /image\/hei[cf]/.test(file.type)) return true;
+  try {
+    const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+    const text = String.fromCharCode(...bytes);
+    return text.slice(4, 8) === 'ftyp' && /^(heic|heix|hevc|hevx|heim|heis|mif1|msf1)$/.test(text.slice(8, 12));
+  } catch {
+    return false;
+  }
+}
+
 async function importPhoto(file) {
   if (!file) return;
   const version = ++importVersion;
@@ -304,6 +345,7 @@ async function importPhoto(file) {
     }
     setImage(photo);
     isUserPhoto = true;
+    unsaved = true;
     options = {...defaults};
     adjustmentHistory.length = 0;
     syncOptions();
@@ -316,7 +358,14 @@ async function importPhoto(file) {
     refreshGalleryPreviews();
     track('photo_selected');
   } catch {
-    if (version === importVersion) showImportError('这张照片打不开。请试试另一张。');
+    if (version !== importVersion) return;
+    if (await isHeic(file)) {
+      showImportError('这张是苹果手机常用的 HEIC 格式，这个浏览器打不开。可以先把它转成 JPG 再选：在相册里编辑后另存一份，或者给照片截个屏。在 iPhone 上用 Safari 打开本网站，也能直接选。');
+    } else if (file.type && !file.type.startsWith('image/')) {
+      showImportError('这不是照片文件。请选一张照片。');
+    } else {
+      showImportError('这张照片打不开。可以截个屏，或另存为 JPG 后再选。');
+    }
   } finally {
     if (version === importVersion) {
       reading = false;
@@ -385,7 +434,7 @@ function syncOptions() {
   $('fit').hidden = $('fit-label').hidden = original;
   crop = null;
   if (image && !original && options.fit === 'cover') {
-    const {area} = layout(image, selected, options, previewEdge);
+    const {area} = layout(image, selected, look(selected), previewEdge);
     const difference = Math.log(photoRatio(image, options.rotation) / (area.w / area.h));
     if (Math.abs(difference) > .005) crop = {x: difference > 0, y: difference < 0};
   }
@@ -487,12 +536,12 @@ function clearResult() {
   resultFile = null;
 }
 
-function exportName() {
+// Frame name, local date and a number, so the file is easy to recognise in Downloads.
+function exportName(frame) {
   const now = new Date();
   const pad = value => String(value).padStart(2, '0');
   const date = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
-  const time = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-  return `拾光相框-${date}-${time}-${++exportNumber}.jpg`;
+  return `拾光相框-${frame.name}-${date}-${++exportNumber}.jpg`;
 }
 
 function showResult() {
@@ -505,8 +554,8 @@ function showResult() {
   $('share-text').textContent = shareFirst ? '保存到相册' : '发给家人或其他应用';
   $('download-text').textContent = shareFirst ? '下载到文件' : '下载照片';
   $('result-lead').textContent = shareFirst
-    ? '还差一步。点「保存到相册」，在弹出的菜单里选「存储图像」。'
-    : '还差一步。点「下载照片」，把成品存到设备。';
+    ? '成品做好了。点「保存到相册」，在弹出的菜单里选「存储图像」。'
+    : '成品做好了。点「下载照片」，存到这台设备。';
   download.after(share);
   if (shareFirst) download.before(share);
   openDialog(resultDialog, save);
@@ -520,7 +569,7 @@ save.addEventListener('click', async () => {
   const version = importVersion;
   const photo = image;
   const frame = selected;
-  const settings = {...options};
+  const settings = look(frame);
   const canvas = document.createElement('canvas');
   try {
     paint(canvas, photo, frame, settings, layout(photo, frame, settings, exportEdge, exportPixels));
@@ -530,7 +579,7 @@ save.addEventListener('click', async () => {
     resultUrl = URL.createObjectURL(blob);
     $('result-image').src = resultUrl;
     download.href = resultUrl;
-    const filename = exportName();
+    const filename = exportName(frame);
     download.download = filename;
     if (typeof File === 'function') resultFile = new File([blob], filename, {type: blob.type});
     showResult();
@@ -546,7 +595,10 @@ save.addEventListener('click', async () => {
 });
 
 download.addEventListener('click', () => {
-  $('share-status').textContent = '请打开浏览器的「下载」列表查看进度和文件。';
+  unsaved = false;
+  $('share-status').textContent = '';
+  $('result-lead').textContent = `已开始下载。请到浏览器的「下载」列表找「${download.download}」${isApple ? '，或在「文件」App 的「下载项」里找' : ''}。`;
+  $('download-text').textContent = '再次下载';
   track('photo_download_clicked');
 });
 
@@ -554,7 +606,9 @@ share.addEventListener('click', async () => {
   const message = $('share-status');
   try {
     await navigator.share({files: [resultFile]});
-    message.textContent = isApple ? '好了。如果选了「存储图像」，照片就在相册里。' : '';
+    unsaved = false;
+    message.textContent = '';
+    if (isApple) $('result-lead').textContent = '好了。如果选了「存储图像」，照片就在相册里。';
     track('photo_share_completed');
   } catch (error) {
     if (error.name === 'AbortError') return;
@@ -564,12 +618,11 @@ share.addEventListener('click', async () => {
 
 viewFrame.addEventListener('click', () => {
   if (!image) return;
-  const canvas = $('frame-preview');
-  const view = layout(image, selected, options, previewEdge);
-  paint(canvas, previewSource, selected, options, view);
-  canvas.setAttribute('aria-label', selected.name + '相框全图预览');
+  const view = drawFramePreview(false);
+  const long = Math.max(view.width / view.height, view.height / view.width);
+  $('zoom-actions').hidden = long < 2.2;
   const detail = $('frame-detail');
-  detail.hidden = Math.max(view.width / view.height, view.height / view.width) < 3;
+  detail.hidden = long < 3;
   detail.open = false;
   if (!detail.hidden) {
     const swatch = document.createElement('canvas');
@@ -579,6 +632,112 @@ viewFrame.addEventListener('click', () => {
     corner.getContext('2d').drawImage(swatch, 0, 0, 180, 180, 0, 0, 180, 180);
   }
   openDialog($('frame-dialog'), viewFrame);
+});
+
+// Long panoramas and tall photos: draw a sharper copy and let people scroll along it.
+function drawFramePreview(zoom) {
+  const canvas = $('frame-preview');
+  const viewport = $('zoom-view');
+  const settings = look(selected);
+  const view = zoom
+    ? layout(image, selected, settings, 8192, 12_000_000)
+    : layout(image, selected, settings, previewEdge);
+  paint(canvas, zoom ? image : previewSource, selected, settings, view);
+  canvas.setAttribute('aria-label', selected.name + (zoom ? '相框放大预览' : '相框全图预览'));
+  zoomed = zoom;
+  const wide = view.width >= view.height;
+  viewport.classList.toggle('zoomed', zoom);
+  viewport.classList.toggle('tall', zoom && !wide);
+  viewport.tabIndex = zoom ? 0 : -1;
+  canvas.style.width = '';
+  canvas.style.height = '';
+  if (zoom && wide) canvas.style.height = `${Math.min(window.innerHeight * .5, view.height / pixelRatio())}px`;
+  viewport.scrollTo(0, 0);
+  const toggle = $('zoom-toggle');
+  toggle.setAttribute('aria-pressed', String(zoom));
+  toggle.textContent = zoom ? '看整张' : '放大看清两端';
+  $('zoom-prev').hidden = $('zoom-next').hidden = $('zoom-hint').hidden = !zoom;
+  $('zoom-prev').textContent = wide ? '往左看' : '往上看';
+  $('zoom-next').textContent = wide ? '往右看' : '往下看';
+  $('zoom-hint').textContent = wide ? '可以左右滑动查看照片两端的人。' : '可以上下滑动查看整张照片。';
+  return view;
+}
+
+$('zoom-toggle').addEventListener('click', () => drawFramePreview(!zoomed));
+for (const [id, direction] of [['zoom-prev', -1], ['zoom-next', 1]]) {
+  $(id).addEventListener('click', () => {
+    const viewport = $('zoom-view');
+    const tall = viewport.classList.contains('tall');
+    const step = (tall ? viewport.clientHeight : viewport.clientWidth) * .8 * direction;
+    viewport.scrollBy({left: tall ? 0 : step, top: tall ? step : 0, behavior: 'smooth'});
+  });
+}
+
+// Words on frames that carry a caption.
+function syncCaption() {
+  const kind = selected.caption;
+  $('caption').hidden = !kind;
+  if (!kind) return;
+  const state = captions[kind];
+  const labels = captionLabels[kind];
+  $('caption-on').checked = state.on;
+  $('caption-on-text').textContent = labels.toggle;
+  $('caption-text-label').textContent = labels.text;
+  $('caption-text').placeholder = labels.placeholder;
+  $('caption-text').value = state.text;
+  $('caption-date').value = state.date || '';
+  $('caption-date-row').hidden = kind !== 'travel';
+  $('caption-fields').hidden = !state.on;
+}
+
+function captionChanged() {
+  syncOptions();
+  requestPreview();
+  refreshGalleryPreviews(selected.caption);
+}
+
+$('caption-on').addEventListener('change', event => {
+  captions[selected.caption].on = event.target.checked;
+  $('caption-fields').hidden = !event.target.checked;
+  captionChanged();
+});
+$('caption-text').addEventListener('input', event => {
+  captions[selected.caption].text = event.target.value;
+  captionChanged();
+});
+$('caption-date').addEventListener('input', event => {
+  captions[selected.caption].date = event.target.value;
+  captionChanged();
+});
+
+// Pin the frame actions on narrow screens only while they leave room for a whole frame card.
+const saveArea = document.querySelector('.save-area');
+const framesPanel = document.querySelector('.frames-panel');
+const singleColumn = window.matchMedia('(max-width: 72rem)');
+
+function updatePin() {
+  const bar = saveArea.offsetHeight;
+  const card = grid.firstElementChild?.offsetHeight || 0;
+  const pin = singleColumn.matches && bar <= window.innerHeight * .35 && bar + card + 32 <= window.innerHeight;
+  framesPanel.classList.toggle('pin-actions', pin);
+  framesPanel.style.setProperty('--frame-scroll-margin', pin ? `${bar + 12}px` : '0px');
+}
+
+// Keep keyboard focus clear of the pinned bar, also when moving backwards.
+framesPanel.addEventListener('focusin', event => {
+  if (!framesPanel.classList.contains('pin-actions') || saveArea.contains(event.target)) return;
+  const covered = saveArea.getBoundingClientRect().bottom + 8 - event.target.getBoundingClientRect().top;
+  if (covered > 0 && saveArea.getBoundingClientRect().top <= 1) window.scrollBy(0, -covered);
+});
+window.addEventListener('resize', updatePin);
+singleColumn.addEventListener?.('change', updatePin);
+if ('ResizeObserver' in window) new ResizeObserver(updatePin).observe(saveArea);
+
+// The brand link only scrolls to the top, and leaving with unsaved work asks first.
+window.addEventListener('beforeunload', event => {
+  if (!unsaved) return;
+  event.preventDefault();
+  event.returnValue = '';
 });
 
 $('help-open').addEventListener('click', event => openDialog($('help-dialog'), event.currentTarget));

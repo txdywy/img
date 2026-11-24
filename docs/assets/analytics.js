@@ -1,4 +1,4 @@
-import {openDialog, closeDialog} from './dialog.js?v=8';
+import {openDialog, closeDialog} from './dialog.js?v=9';
 
 // Set this to the Measurement ID of the production GA4 web stream.
 const measurementId = 'G-E4XXBC3ML7';
@@ -8,9 +8,10 @@ let started = false;
 
 function preference() {
   try {
-    return localStorage.getItem(key) === 'on';
+    const value = localStorage.getItem(key);
+    return value === null ? null : value === 'on';
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -28,8 +29,21 @@ function start() {
   document.head.append(script);
 }
 
+function apply(choice) {
+  enabled = choice;
+  window['ga-disable-' + measurementId] = !enabled;
+  if (enabled) start();
+}
+
+// Check the stored choice again before every event, so turning statistics off
+// in one tab also stops events from tabs that are already open.
 export function track(event) {
-  if (enabled) window.gtag('event', event);
+  if (!enabled) return;
+  if (preference() === false) {
+    apply(false);
+    return;
+  }
+  window.gtag('event', event);
 }
 
 export function setupAnalytics() {
@@ -37,22 +51,22 @@ export function setupAnalytics() {
   const button = document.querySelector('#analytics-open');
   const dialog = document.querySelector('#analytics-dialog');
   const choice = document.querySelector('#analytics-choice');
-  enabled = preference();
-  if (enabled) start();
+  apply(preference() === true);
+  window.addEventListener('storage', event => {
+    if (event.key === key) apply(event.newValue === 'on');
+  });
   button.hidden = false;
   button.addEventListener('click', () => {
     choice.checked = enabled;
     openDialog(dialog, button);
   });
   document.querySelector('#analytics-save').addEventListener('click', () => {
-    enabled = choice.checked;
-    window['ga-disable-' + measurementId] = !enabled;
     try {
-      localStorage.setItem(key, enabled ? 'on' : 'off');
+      localStorage.setItem(key, choice.checked ? 'on' : 'off');
     } catch {
       // The choice still applies in this tab when storage is unavailable.
     }
-    if (enabled) start();
+    apply(choice.checked);
     closeDialog(dialog);
   });
 }
