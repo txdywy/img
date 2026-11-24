@@ -1,3 +1,5 @@
+import {openDialog, closeDialog} from './dialog.js?v=8';
+
 // Set this to the Measurement ID of the production GA4 web stream.
 const measurementId = 'G-E4XXBC3ML7';
 const key = 'shiguang-analytics';
@@ -40,7 +42,7 @@ export function setupAnalytics() {
   button.hidden = false;
   button.addEventListener('click', () => {
     choice.checked = enabled;
-    dialog.showModal();
+    openDialog(dialog, button);
   });
   document.querySelector('#analytics-save').addEventListener('click', () => {
     enabled = choice.checked;
@@ -51,6 +53,6 @@ export function setupAnalytics() {
       // The choice still applies in this tab when storage is unavailable.
     }
     if (enabled) start();
-    dialog.close();
+    closeDialog(dialog);
   });
 }

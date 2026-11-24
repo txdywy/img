@@ -193,30 +193,78 @@ function motifs(ctx, w, h, m, frame) {
   corners(ctx, w, h, m, frame);
 }
 
-export function aspectRatio(image, options) {
-  if (options.ratio !== 'original') return Number(options.ratio);
-  return options.rotation % 180 === 0 ? image.width / image.height : image.height / image.width;
+function frameShape(frame) {
+  return {margin: frame.motif === 'plain' ? .071 : .098, bottom: frame.motif === 'instant' ? 1.9 : 1};
 }
 
-export function dimensions(image, options, limit, maxPixels = Infinity) {
-  const ratio = aspectRatio(image, options);
-  const big = Math.max(ratio, 1 / ratio);
-  const longest = Math.min(limit, Math.max(1, Math.ceil(Math.max(image.width, image.height) / .80)), Math.floor(Math.sqrt(maxPixels * big)));
-  return ratio >= 1
-    ? [longest, Math.max(1, Math.round(longest / ratio))]
-    : [Math.max(1, Math.round(longest * ratio)), longest];
+export function photoRatio(image, rotation = 0) {
+  return rotation % 180 === 0 ? image.width / image.height : image.height / image.width;
 }
 
-export function paint(canvas, image, frame, options, width, height) {
+// Size-free layout whose short side is 1. Borders are equally wide on every side
+// (an instant frame has a deeper bottom), so long panoramas keep a slim frame.
+// A preset ratio fixes the finished picture; "original" fixes the photo opening.
+function shape(image, frame, options) {
+  const {margin, bottom} = frameShape(frame);
+  if (options.ratio !== 'original') {
+    const ratio = Number(options.ratio);
+    return {width: Math.max(ratio, 1), height: Math.max(1 / ratio, 1), border: margin, bottom};
+  }
+  const ratio = photoRatio(image, options.rotation);
+  const border = margin / (1 - 2 * margin);
+  return {width: Math.max(ratio, 1) + 2 * border, height: Math.max(1 / ratio, 1) + border * (1 + bottom), border, bottom};
+}
+
+function build(width, height, border, bottom) {
+  return {
+    width, height, m: border,
+    area: {x: border, y: border, w: Math.max(1, width - 2 * border), h: Math.max(1, height - border * (1 + bottom))},
+  };
+}
+
+function scaled(form, k) {
+  return build(Math.max(1, Math.round(form.width * k)), Math.max(1, Math.round(form.height * k)), form.border * k, form.bottom);
+}
+
+export function fixedLayout(frame, width, height) {
+  const {margin, bottom} = frameShape(frame);
+  return build(width, height, Math.min(width, height) * margin, bottom);
+}
+
+// Largest layout that does not enlarge the photo, within limit and maxPixels.
+export function layout(image, frame, options, limit, maxPixels = Infinity) {
+  const form = shape(image, frame, options);
+  const opening = Math.max(form.width - 2 * form.border, form.height - form.border * (1 + form.bottom));
+  const k = Math.min(Math.max(image.width, image.height) / opening, limit / Math.max(form.width, form.height),
+    Math.sqrt(maxPixels / (form.width * form.height)));
+  return scaled(form, k);
+}
+
+export function layoutInBox(image, frame, options, boxWidth, boxHeight) {
+  const form = shape(image, frame, options);
+  return scaled(form, Math.min(boxWidth / form.width, boxHeight / form.height));
+}
+
+// Where the photo sits inside the opening, in canvas pixels.
+export function placement(image, options, area) {
+  const rotated = options.rotation % 180 !== 0;
+  const iw = rotated ? image.height : image.width;
+  const ih = rotated ? image.width : image.height;
+  const original = options.ratio === 'original';
+  const cover = original || options.fit === 'cover';
+  const zoom = (cover ? Math.max : Math.min)(area.w / iw, area.h / ih);
+  const w = iw * zoom;
+  const h = ih * zoom;
+  const x = cover && !original ? options.x : .5;
+  const y = cover && !original ? options.y : .5;
+  return {zoom, w, h, cx: area.x + w / 2 + (area.w - w) * x, cy: area.y + h / 2 + (area.h - h) * y};
+}
+
+export function paint(canvas, image, frame, options, {width, height, m, area}) {
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
   const ctx = canvas.getContext('2d', {alpha: false});
   if (!ctx) throw new Error('Canvas unavailable');
-  const margin = frame.motif === 'plain' ? .071 : .098;
-  const m = Math.min(width, height) * margin;
-  const innerScale = 1 - margin * (frame.motif === 'instant' ? 2.54 : 2);
-  // Scale both axes together so an original-ratio photo fills the opening.
-  const area = {x: width * (1 - innerScale) / 2, y: height * margin, w: width * innerScale, h: height * innerScale};
   box(ctx, 0, 0, width, height, frame.paper);
   ctx.save();
   ctx.globalAlpha = .40;
@@ -224,18 +272,13 @@ export function paint(canvas, image, frame, options, width, height) {
   ctx.restore();
   box(ctx, area.x, area.y, area.w, area.h, frame.paper);
   if (image) {
-    const rotated = options.rotation % 180 !== 0;
-    const iw = rotated ? image.height : image.width;
-    const ih = rotated ? image.width : image.height;
-    const zoom = (options.fit === 'cover' ? Math.max : Math.min)(area.w / iw, area.h / ih);
-    const dx = area.x + iw * zoom / 2 + (area.w - iw * zoom) * (options.fit === 'cover' ? options.x : .5);
-    const dy = area.y + ih * zoom / 2 + (area.h - ih * zoom) * (options.fit === 'cover' ? options.y : .5);
+    const {zoom, cx, cy} = placement(image, options, area);
     ctx.save();
     ctx.beginPath();
     ctx.rect(area.x, area.y, area.w, area.h);
     ctx.clip();
     ctx.imageSmoothingQuality = 'high';
-    ctx.translate(dx, dy);
+    ctx.translate(cx, cy);
     ctx.rotate(options.rotation * Math.PI / 180);
     ctx.drawImage(image, -image.width * zoom / 2, -image.height * zoom / 2, image.width * zoom, image.height * zoom);
     ctx.restore();
