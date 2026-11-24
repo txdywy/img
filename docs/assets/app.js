@@ -75,6 +75,7 @@ function drawPreview() {
   paint(preview, image, selected, options, width, height);
   preview.setAttribute('aria-label', `${isUserPhoto ? '照片' : '示例照片'}预览，${selected.name}相框`);
   preview.hidden = false;
+  $('view-frame').disabled = false;
   $('stage-placeholder').hidden = true;
   fitPreview();
 }
@@ -95,6 +96,7 @@ for (const [id, name] of categories) {
 }
 
 function updateFrameSelection() {
+  $('current-frame').textContent = '当前相框：' + selected.name;
   for (const button of grid.children) {
     const chosen = button.dataset.frame === selected.id;
     button.setAttribute('aria-pressed', String(chosen));
@@ -398,6 +400,28 @@ resultDialog.querySelector('form').addEventListener('submit', event => {
 resultDialog.addEventListener('close', () => {
   save.focus({preventScroll: true});
 });
+
+const frameDialog = $('frame-dialog');
+const viewFrame = $('view-frame');
+viewFrame.addEventListener('click', () => {
+  if (!image) return;
+  const canvas = $('frame-preview');
+  const [width, height] = dimensions(image, options, 1200);
+  paint(canvas, image, selected, options, width, height);
+  canvas.setAttribute('aria-label', selected.name + '相框全图预览');
+  if (typeof frameDialog.showModal === 'function') frameDialog.showModal();
+  else {
+    frameDialog.setAttribute('open', '');
+    frameDialog.querySelector('button').focus();
+  }
+});
+frameDialog.querySelector('form').addEventListener('submit', event => {
+  if (typeof frameDialog.close === 'function') return;
+  event.preventDefault();
+  frameDialog.removeAttribute('open');
+  viewFrame.focus();
+});
+frameDialog.addEventListener('close', () => viewFrame.focus({preventScroll: true}));
 
 const help = $('help-dialog');
 $('help-open').addEventListener('click', () => help.showModal());

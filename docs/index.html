@@ -14,9 +14,9 @@
   <meta property="og:description" content="36 款免费相框，选照片、挑相框、保存。照片留在自己的设备上。">
   <meta property="og:url" content="https://img.hackx64.eu.org/">
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./assets/style.css?v=2">
+  <link rel="stylesheet" href="./assets/style.css?v=3">
   <link rel="preload" as="image" href="./assets/example.webp" type="image/webp">
-  <script type="module" src="./assets/app.js?v=3"></script>
+  <script type="module" src="./assets/app.js?v=4"></script>
 </head>
 <body>
   <svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -100,13 +100,16 @@
           <span class="frame-count" id="frame-count"></span>
         </header>
         <div class="filters" id="filters" role="group" aria-label="相框分类"></div>
-        <div class="frame-grid" id="frames" role="group" aria-label="相框款式"></div>
-        <button class="more" type="button" id="more" aria-controls="frames" aria-expanded="false" hidden>查看更多相框 <span class="chevron" aria-hidden="true"></span></button>
-        <div class="save-area" aria-labelledby="save-title">
-          <h2 id="save-title"><span class="step">3</span> 保存照片</h2>
-          <button class="button save" type="button" id="save" disabled><svg class="icon"><use href="#i-save"/></svg> <span id="save-text">做好这张照片</span></button>
+        <div class="save-area" aria-label="当前相框和成品操作">
+          <p id="current-frame" aria-live="polite"></p>
+          <div class="frame-actions">
+            <button class="button secondary" type="button" id="view-frame" disabled>看大图</button>
+            <button class="button save" type="button" id="save" disabled><span id="save-text">做好这张照片</span></button>
+          </div>
           <p class="save-hint" id="save-hint">先选一张自己的照片</p>
         </div>
+        <div class="frame-grid" id="frames" role="group" aria-label="相框款式"></div>
+        <button class="more" type="button" id="more" aria-controls="frames" aria-expanded="false" hidden>查看更多相框 <span class="chevron" aria-hidden="true"></span></button>
       </section>
     </section>
     <noscript><p class="status error">请在浏览器中开启 JavaScript，再使用相框工具。</p></noscript>
@@ -136,6 +139,14 @@
         <button class="button primary" id="analytics-save" type="button">保存设置</button>
         <form method="dialog"><button class="button secondary">取消</button></form>
       </div>
+    </div>
+  </dialog>
+
+  <dialog id="frame-dialog" aria-labelledby="frame-dialog-title">
+    <div class="dialog-inner">
+      <h2 id="frame-dialog-title">相框预览</h2>
+      <canvas id="frame-preview" role="img" aria-label="全图预览"></canvas>
+      <form method="dialog"><button class="button primary" autofocus>返回挑相框</button></form>
     </div>
   </dialog>
 

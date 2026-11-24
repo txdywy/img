@@ -164,3 +164,15 @@ dialog::backdrop { background: #32231995; }
 .analytics-choice input { width: 1.25rem; height: 1.25rem; accent-color: var(--rose); }
 .result-actions form { margin: 0; }
 .footer { align-items: center; }
+
+.save-area { margin: 0 0 .8rem; padding: .65rem; border: 1px solid var(--line); border-radius: .65rem; background: var(--panel); }
+#current-frame { font-weight: 700; margin-bottom: .4rem; }
+.frame-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.frame-actions .save { flex: 1 1 auto; width: auto; }
+.save-hint { text-align: start; }
+.frame, .more { scroll-margin-top: var(--frame-scroll-margin, 0px); }
+#frame-preview { display: block; max-width: 100%; max-height: 57vh; object-fit: contain; height: auto; margin-inline: auto; }
+@media (max-width: 46rem) and (min-height: 32rem) {
+  .frames-panel { --frame-scroll-margin: 9rem; }
+  .save-area { position: sticky; top: 0; z-index: 1; }
+}
