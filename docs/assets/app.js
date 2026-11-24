@@ -238,8 +238,9 @@ async function importPhoto(file) {
     syncOptions();
     $('preview-label').textContent = '我的照片';
     $('pick-text').textContent = '换一张照片';
-    $('file-hint').textContent = '原照片会保留';
-    showStatus('照片已选好。点任意一款相框试试看。');
+    $('file-hint').textContent = '原照片还在';
+    $('go-frames').hidden = false;
+    showStatus('照片已选好。');
     requestPreview();
     refreshGalleryPreviews();
     track('photo_selected');
@@ -252,6 +253,12 @@ async function importPhoto(file) {
     }
   }
 }
+
+$('go-frames').addEventListener('click', () => {
+  const title = $('frame-title');
+  title.focus({preventScroll: true});
+  title.scrollIntoView({block: 'start'});
+});
 
 $('pick').addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => {

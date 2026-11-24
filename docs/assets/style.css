@@ -203,3 +203,11 @@ dialog::backdrop { background: #32231995; }
   .save-area { position: static; }
   .frames-panel { --frame-scroll-margin: 0px; }
 }
+
+.photo-actions { margin: 0 0 .75rem; }
+.photo-panel > .status { margin: 0 0 .75rem; }
+.phone-pick { display: none; }
+@media (pointer: coarse), (max-width: 46rem) {
+  .phone-pick { display: inline; }
+  .desktop-pick { display: none; }
+}

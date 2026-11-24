@@ -14,9 +14,9 @@
   <meta property="og:description" content="36 款免费相框，选照片、挑相框、保存。照片留在自己的设备上。">
   <meta property="og:url" content="https://img.hackx64.eu.org/">
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./assets/style.css?v=4">
+  <link rel="stylesheet" href="./assets/style.css?v=5">
   <link rel="preload" as="image" href="./assets/example.webp" type="image/webp">
-  <script type="module" src="./assets/app.js?v=4"></script>
+  <script type="module" src="./assets/app.js?v=5"></script>
 </head>
 <body>
   <svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -53,17 +53,18 @@
           <h2 id="photo-title"><span class="step">1</span> 选张照片</h2>
           <span class="preview-label" id="preview-label">示例预览</span>
         </header>
+        <div class="photo-actions">
+            <button class="button primary" type="button" id="pick"><svg class="icon"><use href="#i-photo"/></svg> <span id="pick-text"><span class="phone-pick">从相册选照片</span><span class="desktop-pick">选择照片</span></span></button>
+            <input id="file" type="file" accept="image/*,.heic,.heif" hidden>
+            <span class="file-hint" id="file-hint">免费，会另存一张，原照片还在</span>
+          <button class="button secondary" type="button" id="go-frames" hidden>去挑相框</button>
+        </div>
+        <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
         <div class="stage" id="stage">
           <canvas id="preview" width="640" height="480" role="img" aria-label="照片加相框预览"></canvas>
           <span class="stage-placeholder" id="stage-placeholder" hidden>选一张照片，就能在这里看到套框效果</span>
         </div>
         <div class="photo-controls">
-          <div class="photo-actions">
-            <button class="button primary" type="button" id="pick"><svg class="icon"><use href="#i-photo"/></svg> <span id="pick-text">选我的照片</span></button>
-            <input id="file" type="file" accept="image/*,.heic,.heif" hidden>
-            <span class="file-hint" id="file-hint">支持 JPG、PNG、WebP 等</span>
-          </div>
-          <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
           <details class="adjust" id="adjust">
             <summary><svg class="icon"><use href="#i-adjust"/></svg> 调整照片 <span class="chevron" aria-hidden="true"></span></summary>
             <div class="adjust-body">
@@ -96,7 +97,7 @@
 
       <section class="panel frames-panel" aria-labelledby="frame-title">
         <header class="panel-head">
-          <h2 id="frame-title"><span class="step">2</span> 挑个相框</h2>
+          <h2 id="frame-title" tabindex="-1"><span class="step">2</span> 挑个相框</h2>
           <span class="frame-count" id="frame-count"></span>
         </header>
         <div class="filters" id="filters" role="group" aria-label="相框分类"></div>
@@ -121,7 +122,7 @@
     <div class="dialog-inner">
       <h2 id="help-title">怎样给照片加相框？</h2>
       <ol>
-        <li>点「选我的照片」，从相册或文件里选一张。</li>
+        <li>先从相册或文件里选一张自己的照片。</li>
         <li>点喜欢的相框。默认保留整张照片和原图比例，长图也能套框。展开「调整照片」可以改比例或旋转。</li>
         <li>点「做好这张照片」，再在成品窗口点「下载照片」。</li>
       </ol>
