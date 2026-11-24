@@ -135,6 +135,8 @@ dialog::backdrop { background: #32231995; }
   .intro p { font-size: 1rem; margin-top: .5rem; }
   .privacy { font-size: .91rem; padding: .28rem .6rem; }
   .workspace { grid-template-columns: 1fr; }
+  .filters { display: grid; grid-template-columns: repeat(6, minmax(2.75rem, 1fr)); }
+  .filter { padding-inline: .15rem; }
   .panel { padding: .9rem; }
   .panel-head { margin-bottom: .75rem; }
   .stage { padding: 1rem; }
@@ -146,6 +148,7 @@ dialog::backdrop { background: #32231995; }
 @media (max-width: 23rem) {
   h1 { font-size: 2.3rem; }
   .frame-grid { gap: .38rem; }
+  .filters { display: flex; }
   .frame { font-size: .9rem; }
   .filter { padding-inline: .46rem; }
 }
