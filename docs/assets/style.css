@@ -99,7 +99,11 @@ details[open] .chevron, [aria-expanded="true"] .chevron { transform: rotate(225d
 }
 .frame:hover { border-color: #ae7780; background: #f9efea; }
 .frame[aria-pressed="true"] { border-color: var(--rose); box-shadow: inset 0 0 0 1px var(--rose); background: var(--rose-light); color: #782538; font-weight: 750; }
-.frame canvas { display: block; width: 100%; height: auto; border-radius: .3rem; background: var(--stage); }
+.thumbnail {
+  display: grid; place-items: center; aspect-ratio: 184 / 116; overflow: hidden;
+  border-radius: .3rem; background: var(--stage);
+}
+.thumbnail canvas { display: block; width: 100%; height: auto; max-width: 100%; }
 .frame .chosen { position: absolute; display: grid; place-items: center; width: 1.35rem; height: 1.35rem; top: .62rem; right: .62rem; border-radius: 50%; background: var(--rose); color: var(--panel); }
 .chosen .icon { width: .9rem; height: .9rem; }
 .more { display: flex; align-items: center; justify-content: center; gap: .42rem; min-height: 2.75rem; width: 100%; margin-top: .42rem; padding: .2rem; border: 0; background: transparent; color: var(--soft); border-radius: .35rem; }

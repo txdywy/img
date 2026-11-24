@@ -1,5 +1,5 @@
 import {frames, categories, byId} from './frames.js';
-import {dimensions, paint} from './render.js';
+import {aspectRatio, dimensions, paint} from './render.js?v=2';
 import {setupAnalytics, track} from './analytics.js';
 
 const $ = id => document.getElementById(id);
@@ -14,6 +14,8 @@ const status = $('status');
 const resultDialog = $('result-dialog');
 const defaults = {ratio: 'original', fit: 'contain', rotation: 0, x: .5, y: .5};
 const thumbnailOptions = {...defaults, fit: 'cover'};
+const tileWidth = 184;
+const tileHeight = 116;
 const listSize = 6;
 const maxImportSize = 50 * 1024 * 1024;
 const exportEdge = 4096;
@@ -100,6 +102,25 @@ function updateFrameSelection() {
   }
 }
 
+function drawTile(canvas, frame) {
+  if (!isUserPhoto) {
+    canvas.style.width = '';
+    paint(canvas, image, frame, {...thumbnailOptions, rotation: options.rotation}, tileWidth, tileHeight);
+    return;
+  }
+  const ratio = aspectRatio(image, options);
+  const width = Math.max(1, Math.round(Math.min(tileWidth, tileHeight * ratio)));
+  const height = Math.max(1, Math.round(Math.min(tileHeight, tileWidth / ratio)));
+  canvas.style.width = `${100 * width / tileWidth}%`;
+  paint(canvas, image, frame, options, width, height);
+}
+
+function refreshGalleryPreviews() {
+  for (const button of grid.children) {
+    drawTile(button.querySelector('canvas'), byId.get(button.dataset.frame));
+  }
+}
+
 function drawGallery() {
   const items = category === 'all' ? frames : frames.filter(frame => frame.category === category);
   $('frame-count').textContent = `${items.length} 款相框`;
@@ -112,14 +133,17 @@ function drawGallery() {
     button.dataset.frame = frame.id;
     const canvas = document.createElement('canvas');
     canvas.setAttribute('aria-hidden', 'true');
-    paint(canvas, image, frame, {...thumbnailOptions, rotation: options.rotation}, 184, 116);
+    drawTile(canvas, frame);
+    const thumbnail = document.createElement('span');
+    thumbnail.className = 'thumbnail';
+    thumbnail.append(canvas);
     const caption = document.createElement('span');
     caption.textContent = frame.name;
     const mark = document.createElement('span');
     mark.className = 'chosen';
     mark.setAttribute('aria-hidden', 'true');
     mark.innerHTML = '<svg class="icon"><use href="#i-check"/></svg>';
-    button.append(canvas, caption, mark);
+    button.append(thumbnail, caption, mark);
     entries.append(button);
   }
   grid.replaceChildren(entries);
@@ -215,7 +239,7 @@ async function importPhoto(file) {
     $('file-hint').textContent = '原照片会保留';
     showStatus('照片已选好。点任意一款相框试试看。');
     requestPreview();
-    drawGallery();
+    refreshGalleryPreviews();
     track('photo_selected');
   } catch {
     if (version === importVersion) showStatus('这张照片打不开。请试试 JPG、PNG 或 WebP 照片。', true);
@@ -272,14 +296,18 @@ function syncOptions() {
 $('ratio').addEventListener('change', event => {
   options.ratio = event.target.value;
   requestPreview();
+  refreshGalleryPreviews();
 });
 $('fit').addEventListener('change', event => {
   options.fit = event.target.value;
   syncOptions();
   requestPreview();
+  refreshGalleryPreviews();
 });
 for (const axis of ['x', 'y']) {
-  $('offset-' + axis).addEventListener('input', event => {
+  const slider = $('offset-' + axis);
+  slider.addEventListener('change', refreshGalleryPreviews);
+  slider.addEventListener('input', event => {
     options[axis] = Number(event.target.value) / 100;
     requestPreview();
   });
@@ -287,13 +315,13 @@ for (const axis of ['x', 'y']) {
 $('rotate').addEventListener('click', () => {
   options.rotation = (options.rotation + 90) % 360;
   requestPreview();
-  drawGallery();
+  refreshGalleryPreviews();
 });
 $('reset').addEventListener('click', () => {
   options = {...defaults};
   syncOptions();
   requestPreview();
-  drawGallery();
+  refreshGalleryPreviews();
 });
 
 function encode(canvas) {
@@ -369,7 +397,7 @@ $('stage-placeholder').hidden = false;
 loadImage(new URL('./example.webp', import.meta.url).href).then(sample => {
   if (isUserPhoto) return;
   image = sample;
-  drawGallery();
+  refreshGalleryPreviews();
   requestPreview();
 }).catch(() => {
   $('preview-label').textContent = '等待选图';

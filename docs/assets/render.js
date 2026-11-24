@@ -193,13 +193,15 @@ function motifs(ctx, w, h, m, frame) {
   corners(ctx, w, h, m, frame);
 }
 
+export function aspectRatio(image, options) {
+  if (options.ratio !== 'original') return Number(options.ratio);
+  return options.rotation % 180 === 0 ? image.width / image.height : image.height / image.width;
+}
+
 export function dimensions(image, options, limit, maxPixels = Infinity) {
-  const rotated = options.rotation % 180 !== 0;
-  const width = rotated ? image.height : image.width;
-  const height = rotated ? image.width : image.height;
-  const ratio = options.ratio === 'original' ? width / height : Number(options.ratio);
+  const ratio = aspectRatio(image, options);
   const big = Math.max(ratio, 1 / ratio);
-  const longest = Math.min(limit, Math.max(1, Math.ceil(Math.max(width, height) / .84)), Math.floor(Math.sqrt(maxPixels * big)));
+  const longest = Math.min(limit, Math.max(1, Math.ceil(Math.max(image.width, image.height) / .80)), Math.floor(Math.sqrt(maxPixels * big)));
   return ratio >= 1
     ? [longest, Math.max(1, Math.round(longest / ratio))]
     : [Math.max(1, Math.round(longest * ratio)), longest];
@@ -210,8 +212,11 @@ export function paint(canvas, image, frame, options, width, height) {
   if (canvas.height !== height) canvas.height = height;
   const ctx = canvas.getContext('2d', {alpha: false});
   if (!ctx) throw new Error('Canvas unavailable');
-  const m = Math.min(width, height) * (frame.motif === 'plain' ? .071 : .098);
-  const area = {x: m, y: m, w: width - m * 2, h: height - m * (frame.motif === 'instant' ? 2.54 : 2)};
+  const margin = frame.motif === 'plain' ? .071 : .098;
+  const m = Math.min(width, height) * margin;
+  const innerScale = 1 - margin * (frame.motif === 'instant' ? 2.54 : 2);
+  // Scale both axes together so an original-ratio photo fills the opening.
+  const area = {x: width * (1 - innerScale) / 2, y: height * margin, w: width * innerScale, h: height * innerScale};
   box(ctx, 0, 0, width, height, frame.paper);
   ctx.save();
   ctx.globalAlpha = .40;
