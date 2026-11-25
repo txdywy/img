@@ -159,9 +159,12 @@ async function phoneChecks(viewport, label, font = 0) {
   await page.setViewportSize({width: viewport.height, height: viewport.width});
   await settle(page);
   await page.setViewportSize(viewport);
+  // Browsers may report the new height in steps after a turn; the page re-measures for a second.
+  await page.waitForTimeout(1200);
   await settle(page);
   const back = await snapshot(page);
-  if (Math.abs(back.stage[1] - pinned.stage[1]) > 1) errors.push(`${at}: after turning the phone and back the preview is ${back.stage[1]}px, was ${pinned.stage[1]}px`);
+  const seen = await page.evaluate(() => `${window.innerWidth}x${window.innerHeight}`);
+  if (Math.abs(back.stage[1] - pinned.stage[1]) > 1) errors.push(`${at}: after turning the phone and back (window ${seen}) the preview is ${back.stage[1]}px, was ${pinned.stage[1]}px`);
   if (!start.stage[1]) errors.push(`${at}: no preview box on first load`);
   await page.close();
 }

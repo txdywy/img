@@ -1024,6 +1024,7 @@ let layoutFrame = 0;
 const sampleShape = 4 / 3;
 let steadyWidth = 0;
 let steadyHeight = 0;
+let steadySince = 0;
 let stageFor;
 let stageWidth = 0;
 let stageRem = 0;
@@ -1042,13 +1043,20 @@ function scheduleLayout() {
 // The window gets taller when a phone's address bar slides away and shorter when the
 // keyboard opens. Neither should resize or unpin the preview, so the layout follows
 // the window's height only when the phone is turned (a new width) or the window
-// really changes size (split screen), not while someone is typing.
+// really changes size (split screen), not while someone is typing. Right after a turn
+// the browser may report the height in steps, so for a moment every new value counts.
 function steadyViewHeight() {
   const width = window.innerWidth;
   const height = window.innerHeight;
+  const now = Date.now();
   const field = document.activeElement;
   const typing = field && field.tagName === 'INPUT' && field.type === 'text';
-  if (!steadyHeight || width !== steadyWidth || (!typing && Math.abs(height - steadyHeight) > steadyHeight * .3)) {
+  if (width !== steadyWidth) {
+    steadySince = now;
+    setTimeout(scheduleLayout, 300);
+    setTimeout(scheduleLayout, 900);
+  }
+  if (!steadyHeight || now - steadySince < 1000 || (!typing && Math.abs(height - steadyHeight) > steadyHeight * .3)) {
     steadyWidth = width;
     steadyHeight = height;
   }
