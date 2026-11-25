@@ -11,12 +11,12 @@
   <meta property="og:type" content="website">
   <meta property="og:locale" content="zh_CN">
   <meta property="og:title" content="拾光相框 · 给照片加个相框">
-  <meta property="og:description" content="36 款免费相框，选照片、挑相框、保存。照片留在自己的设备上。">
+  <meta property="og:description" content="39 款免费相框，选照片、挑相框、保存。照片留在自己的设备上。">
   <meta property="og:url" content="https://img.hackx64.eu.org/">
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./assets/style.css?v=7">
+  <link rel="stylesheet" href="./assets/style.css?v=9">
   <link rel="preload" as="image" href="./assets/example.webp" type="image/webp">
-  <script type="module" src="./assets/app.js?v=7"></script>
+  <script type="module" src="./assets/app.js?v=9"></script>
 </head>
 <body>
   <svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -29,9 +29,9 @@
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
   </svg>
   <a class="skip" href="#editor">跳到相框工具</a>
-  <header class="top">
+  <header class="top" id="top">
     <div class="shell top-inner">
-      <a class="brand" href="./" aria-label="拾光相框首页">
+      <a class="brand" href="#top" aria-label="拾光相框，回到页面顶部">
         <span class="brand-mark"><svg><use href="#i-brand"/></svg></span>
         <span>拾光相框</span>
       </a>
@@ -54,10 +54,10 @@
           <span class="preview-label" id="preview-label">示例预览</span>
         </header>
         <div class="photo-actions">
-            <button class="button primary" type="button" id="pick"><svg class="icon"><use href="#i-photo"/></svg> <span id="pick-text"><span class="phone-pick">从相册选照片</span><span class="desktop-pick">选择照片</span></span></button>
-            <input id="file" type="file" accept="image/*,.heic,.heif" hidden>
-            <span class="file-hint" id="file-hint">免费，会另存一张，原照片还在</span>
-          <button class="button secondary" type="button" id="go-frames" hidden>去挑相框</button>
+          <button class="button primary" type="button" id="pick"><svg class="icon"><use href="#i-photo"/></svg> <span id="pick-text"><span class="phone-pick">从相册选照片</span><span class="desktop-pick">选择照片</span></span></button>
+          <input id="file" type="file" accept="image/*,.heic,.heif" hidden>
+          <span class="file-hint" id="file-hint">免费，会另存一张，原照片还在</span>
+          <button class="button secondary go-frames" type="button" id="go-frames" hidden>去挑相框</button>
         </div>
         <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
         <button type="button" class="button secondary retry-photo" id="retry-photo" hidden>重新选照片</button>
@@ -78,13 +78,13 @@
                 <option value="1.3333333333333333">横图 4∶3</option>
                 <option value="1.7777777777777777">宽屏 16∶9</option>
               </select>
-              <label for="fit">照片放置</label>
+              <label for="fit" id="fit-label">照片放置</label>
               <select id="fit">
                 <option value="contain">显示整张照片</option>
                 <option value="cover">铺满相框</option>
               </select>
-              <p class="crop-note" id="crop-note" hidden>铺满相框会剪掉照片的一部分。</p>
-              <div class="position" id="position" hidden aria-label="微调照片的位置">
+              <p class="crop-note" id="crop-note" hidden>铺满相框会剪掉照片的一部分。可以在预览图上拖动照片，或用下面的按钮调整位置。</p>
+              <div class="position" id="position" role="group" hidden aria-label="微调照片的位置">
                 <div class="adjust-actions" id="position-x">
                   <button type="button" class="button secondary" data-axis="x" data-step="10">向左移</button>
                   <button type="button" class="button secondary" data-axis="x" data-step="-10">向右移</button>
@@ -110,15 +110,27 @@
           <span class="frame-count" id="frame-count"></span>
         </header>
         <div class="filters" id="filters" role="group" aria-label="相框分类"></div>
-        <div class="save-area" aria-label="当前相框和成品操作">
+        <div class="save-area" role="group" aria-label="当前相框和成品操作">
           <p id="current-frame" aria-live="polite"></p>
           <div class="frame-actions">
-            <button class="button secondary" type="button" id="view-frame" disabled>看大图</button>
+            <button class="button secondary view-frame" type="button" id="view-frame" disabled><canvas id="mini-preview" width="1" height="1" aria-hidden="true"></canvas><span>看大图</span></button>
             <button class="button save" type="button" id="save" disabled><span id="save-text">做好这张照片</span></button>
           </div>
           <p class="save-hint" id="save-hint">先选一张自己的照片</p>
           <p class="status error" id="save-status" role="status"></p>
         </div>
+        <fieldset class="caption" id="caption" hidden>
+          <legend>相框上的字</legend>
+          <label class="check"><input type="checkbox" id="caption-on" checked> <span id="caption-on-text">加一句祝福</span></label>
+          <div class="caption-fields" id="caption-fields">
+            <label for="caption-text" id="caption-text-label">祝福语</label>
+            <input id="caption-text" type="text" maxlength="16" autocomplete="off">
+            <div class="caption-row" id="caption-date-row" hidden>
+              <label for="caption-date">日期</label>
+              <input id="caption-date" type="text" maxlength="16" autocomplete="off">
+            </div>
+          </div>
+        </fieldset>
         <div class="frame-grid" id="frames" role="group" aria-label="相框款式"></div>
         <button class="more" type="button" id="more" aria-controls="frames" aria-expanded="false" hidden>查看更多相框 <span class="chevron" aria-hidden="true"></span></button>
       </section>
@@ -132,9 +144,9 @@
     <div class="dialog-inner">
       <h2 id="help-title">怎样给照片加相框？</h2>
       <ol>
-        <li>先从相册或文件里选一张自己的照片。</li>
-        <li>点喜欢的相框。默认保留整张照片和原图比例，长图也能套框。展开「调整照片」可以改比例或旋转。</li>
-        <li>点「做好这张照片」，再在成品窗口点「下载照片」。</li>
+        <li>先从相册或文件里选一张自己的照片。电脑上也可以把照片拖进页面，或复制后按 Ctrl+V 粘贴。</li>
+        <li>点喜欢的相框。默认保留整张照片和原图比例，长图也能套框。展开「调整照片」可以改比例或旋转，铺满相框时可在预览图上拖动照片。</li>
+        <li>点「做好这张照片」，再在成品窗口保存。iPhone 和 iPad 上点「保存到相册」，其他设备点「下载照片」。</li>
       </ol>
       <p>照片处理都在这台设备上完成。遇到打不开的照片，可以在相册里另存为 JPG 或 PNG，再选一次。</p>
       <form method="dialog"><button class="button primary">我知道了</button></form>
@@ -156,7 +168,13 @@
   <dialog id="frame-dialog" aria-labelledby="frame-dialog-title">
     <div class="dialog-inner">
       <h2 id="frame-dialog-title">相框预览</h2>
-      <canvas id="frame-preview" role="img" aria-label="全图预览"></canvas>
+      <div class="zoom-view" id="zoom-view" role="region" aria-label="成品预览"><canvas id="frame-preview" role="img" aria-label="全图预览"></canvas></div>
+      <div class="zoom-actions" id="zoom-actions" hidden>
+        <button class="button secondary" id="zoom-toggle" type="button" aria-pressed="false">放大看清两端</button>
+        <button class="button secondary" id="zoom-prev" type="button" hidden>往左看</button>
+        <button class="button secondary" id="zoom-next" type="button" hidden>往右看</button>
+      </div>
+      <p class="zoom-hint" id="zoom-hint" hidden></p>
       <details id="frame-detail" hidden>
         <summary>看看相框花纹</summary>
         <p>下图是单独放大的框角。上方是实际成品的完整预览。</p>
@@ -169,11 +187,11 @@
   <dialog id="result-dialog" aria-labelledby="result-title">
     <div class="dialog-inner">
       <h2 id="result-title">相框照片做好了</h2>
-      <p>还差一步。点「下载照片」，把成品存到设备。</p>
+      <p id="result-lead" aria-live="polite">还差一步。点「下载照片」，把成品存到设备。</p>
       <img id="result-image" alt="加好相框的成品照片">
       <div class="result-actions">
-        <a class="button primary" id="result-download" download><svg class="icon"><use href="#i-save"/></svg> 下载照片</a>
-        <button class="button secondary" id="share" type="button" hidden>打开系统分享菜单</button>
+        <a class="button primary" id="result-download" download><svg class="icon"><use href="#i-save"/></svg> <span id="download-text">下载照片</span></a>
+        <button class="button secondary" id="share" type="button" hidden><svg class="icon"><use href="#i-photo"/></svg> <span id="share-text">保存到相册</span></button>
       </div>
       <p class="status" id="share-status" role="status"></p>
       <details>
