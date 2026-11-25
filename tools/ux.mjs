@@ -43,6 +43,7 @@ async function open(setup) {
   const page = await browser.newPage({
     viewport: setup.viewport, deviceScaleFactor: setup.scale || 2, acceptDownloads: true,
     hasTouch: Boolean(setup.phone || setup.touch), isMobile: Boolean(setup.phone),
+    ...(setup.userAgent ? {userAgent: setup.userAgent} : {}),
   });
   const at = setup.name;
   page.on('console', message => message.type() === 'error' && errors.push(`${at} console: ${message.text()}`));
@@ -361,6 +362,27 @@ async function wideFlow(setup, photos) {
   await page.close();
 }
 
+// WeChat: no download, so the result image itself must show for a long-press save.
+async function weChatFlow(photos) {
+  const setup = {
+    name: 'wechat-390x844', viewport: {width: 390, height: 844}, phone: true,
+    userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 MicroMessenger/8.0.50',
+  };
+  const at = setup.name;
+  const page = await open(setup);
+  if (!(await importPhoto(page, photos.landscape))) errors.push(`${at}: the photo did not open`);
+  await page.locator('#bar-main').click();
+  const shown = await waitFor(page, () => {
+    const image = document.querySelector('#result-image');
+    return image.complete && image.naturalWidth > 0 && image.getBoundingClientRect().height > 0;
+  });
+  if (!shown) errors.push(`${at}: the finished photo does not show, so it cannot be long-pressed`);
+  const lead = await page.locator('#result-lead').innerText();
+  if (!lead.includes('按住')) errors.push(`${at}: no long-press tip (${lead})`);
+  await shoot(page, setup, '1-result');
+  await page.close();
+}
+
 try {
   const first = await open({name: 'setup', viewport: {width: 800, height: 600}});
   const photos = {
@@ -375,6 +397,11 @@ try {
     } catch (error) {
       errors.push(`${setup.name}: test stopped: ${String(error.message || error).split('\n')[0]}`);
     }
+  }
+  try {
+    await weChatFlow(photos);
+  } catch (error) {
+    errors.push(`wechat: test stopped: ${String(error.message || error).split('\n')[0]}`);
   }
 } catch (error) {
   errors.push(`test crashed: ${error.stack || error}`);
