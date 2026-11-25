@@ -1,7 +1,7 @@
-import {frames, categories, byId} from './frames.js?v=12';
-import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=12';
-import {setupAnalytics, track} from './analytics.js?v=12';
-import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=12';
+import {frames, categories, byId} from './frames.js?v=13';
+import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=13';
+import {setupAnalytics, track} from './analytics.js?v=13';
+import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=13';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -27,13 +27,16 @@ const previewEdge = 1200;
 const maxImportSize = 50 * 1024 * 1024;
 // A small file can still hold an enormous picture; decoding it could run a phone
 // out of memory. 250 million pixels leaves room for 200-megapixel camera photos.
-const maxImportPixels = 250_000_000;
+const maxImportPixels = 250000000;
 const exportEdge = 4096;
-const exportPixels = 16_000_000;
+const exportPixels = 16000000;
 const isApple = /iPhone|iPad|iPod/.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 // WeChat's own browser usually cannot download files; a long press on the picture saves it.
+// QQ, Weibo, DingTalk and Alipay open links in similar built-in browsers.
 const isWeChat = /MicroMessenger/i.test(navigator.userAgent);
+const longPressSave = isWeChat || /\bQQ\/|Weibo|DingTalk|AlipayClient/i.test(navigator.userAgent);
+const isAndroid = /Android|HarmonyOS|OpenHarmony/i.test(navigator.userAgent);
 const coarsePointer = window.matchMedia('(pointer: coarse)');
 // The phone layout: preview pinned on top, one big button at the bottom.
 const phoneLayout = window.matchMedia('(max-width: 46rem)');
@@ -64,6 +67,8 @@ let resultFile = null;
 let dragDepth = 0;
 let unsaved = false;
 let savedNote = false;
+// A finished photo was made but not saved yet (the window was closed first).
+let madeNotSaved = false;
 let importProblem = '';
 let zoomed = false;
 const today = new Date();
@@ -80,7 +85,7 @@ const captionLabels = {
 
 function captionFor(frame) {
   const state = captions[frame.caption];
-  if (!state?.on) return '';
+  if (!state || !state.on) return '';
   if (frame.caption === 'travel') return [state.text.trim(), state.date.trim()].filter(Boolean).join('  ·  ');
   return state.text.trim();
 }
@@ -119,8 +124,10 @@ function updateSave() {
   $('save-text').textContent = exporting ? '正在制作…' : '做好这张照片';
   const hint = $('save-hint');
   hint.textContent = savedNote ? '✓ 已保存。还可以再换个相框，或换一张照片'
+    : madeNotSaved && !resultDialog.open ? '还没存好。点「做好这张照片」接着存'
     : isUserPhoto ? '先看成品，再保存' : '先选一张自己的照片';
   hint.classList.toggle('saved', savedNote);
+  hint.classList.toggle('pending', madeNotSaved && !resultDialog.open);
   updateBar();
 }
 
@@ -130,16 +137,25 @@ function updateBar() {
   barMain.disabled = reading || exporting;
   barPick.hidden = !isUserPhoto;
   barPick.disabled = reading || exporting;
+  // Android phones save at the first tap. Elsewhere the first tap makes the photo
+  // and a second one saves it, so the button says so instead of promising a save.
+  const direct = savesDirectly();
+  const make = direct ? '保存照片' : '做好照片';
   $('bar-main-text').textContent = exporting ? '正在制作…'
     : reading ? '正在打开…'
-    : isUserPhoto ? '保存照片' : '从相册选照片';
+    : isUserPhoto ? make : '从相册选照片';
   $('bar-icon').firstElementChild.setAttribute('href', isUserPhoto ? '#i-save' : '#i-photo');
   // Short enough to stay on one line, even with large text.
   const problem = $('save-status').textContent ? '没做好，请再点一次保存' : importProblem;
   const hint = $('bar-hint');
+  const pending = madeNotSaved && !resultDialog.open;
   hint.textContent = problem || (savedNote ? '✓ 已保存，还可以再换相框'
-    : isUserPhoto ? '点相框换样式，满意就保存' : '先选一张自己的照片');
+    : pending ? `还没存好，再点「${make}」就能存`
+    : isUserPhoto ? (direct ? '点相框换样式，满意就保存' : `点相框换样式，满意就点「${make}」`)
+    // Said before the first tap, for people who worry about their original photo.
+    : '会另存一张，原照片还在');
   hint.classList.toggle('error', Boolean(problem));
+  hint.classList.toggle('pending', !problem && pending);
   hint.classList.toggle('saved', !problem && savedNote);
 }
 
@@ -156,7 +172,7 @@ function downscale(source, longest) {
 }
 
 function setImage(photo) {
-  if (image && image !== photo) image.close?.();
+  if (image && image !== photo && image.close) image.close();
   image = photo;
   previewSource = downscale(photo, previewEdge);
   thumbSource = downscale(previewSource, Math.max(tileWidth, tileHeight) * 2);
@@ -337,7 +353,7 @@ grid.addEventListener('click', event => {
 more.addEventListener('click', () => {
   expanded = !expanded;
   drawGallery();
-  if (expanded) grid.children[listSize]?.focus();
+  if (expanded && grid.children[listSize]) grid.children[listSize].focus();
   else {
     const rect = more.getBoundingClientRect();
     if (rect.top < 0 || rect.bottom > window.innerHeight) more.scrollIntoView({block: 'center'});
@@ -416,7 +432,7 @@ async function importPhoto(file) {
   try {
     const photo = await readPhoto(file);
     if (version !== importVersion) {
-      photo.close?.();
+      if (photo.close) photo.close();
       return;
     }
     const first = !isUserPhoto;
@@ -424,6 +440,7 @@ async function importPhoto(file) {
     isUserPhoto = true;
     unsaved = true;
     savedNote = false;
+    madeNotSaved = false;
     options = {...defaults};
     adjustmentHistory.length = 0;
     syncOptions();
@@ -442,7 +459,7 @@ async function importPhoto(file) {
     const heic = await isHeic(file);
     // Another photo may have been chosen while the file was checked.
     if (version !== importVersion) return;
-    if (error?.name === 'TooManyPixels') {
+    if (error && error.name === 'TooManyPixels') {
       showImportError('这张图太大，换一张试试。', '这张图片的像素太多，手机打不开。可以先把它缩小，或者截个屏，再选截屏。');
     } else if (heic) {
       showImportError('这张打不开，换一张试试。', '这张是苹果手机常用的 HEIC 格式，这个浏览器打不开。可以在相册里编辑后另存一份，或者给照片截个屏，再选。在 iPhone 上用 Safari 打开本网站，也能直接选。');
@@ -467,6 +484,10 @@ function showFrames() {
   if (window.scrollY < top) window.scrollTo(0, top);
 }
 
+// Android phones, and WeChat or QQ there, open the photo album only for a plain
+// "image/*"; adding .heic to the list makes many of them open a file manager instead.
+if (isAndroid || (longPressSave && !isApple)) fileInput.accept = 'image/*';
+
 $('pick').addEventListener('click', () => fileInput.click());
 barPick.addEventListener('click', () => fileInput.click());
 barMain.addEventListener('click', () => {
@@ -482,7 +503,7 @@ fileInput.addEventListener('change', () => {
 
 // Accept a dropped photo anywhere, so a missed drop never opens the file and loses the work.
 function isFileDrag(event) {
-  return Array.from(event.dataTransfer?.types || []).includes('Files');
+  return Array.from((event.dataTransfer && event.dataTransfer.types) || []).includes('Files');
 }
 
 function endDrag() {
@@ -513,7 +534,7 @@ document.addEventListener('drop', event => {
   void importPhoto(event.dataTransfer.files[0]);
 });
 document.addEventListener('paste', event => {
-  const file = Array.from(event.clipboardData?.files || []).find(item => item.type.startsWith('image/'));
+  const file = Array.from((event.clipboardData && event.clipboardData.files) || []).find(item => item.type.startsWith('image/'));
   if (!file) return;
   event.preventDefault();
   void importPhoto(file);
@@ -531,12 +552,12 @@ function syncOptions() {
     if (Math.abs(difference) > .005) crop = {x: difference > 0, y: difference < 0};
   }
   // Say plainly which part of the photo is cut off, so nobody loses a person without noticing.
-  $('crop-side').textContent = crop?.x ? '照片左右两边被剪掉了一些。' : '照片上下被剪掉了一些。';
+  $('crop-side').textContent = crop && crop.x ? '照片左右两边被剪掉了一些。' : '照片上下被剪掉了一些。';
   $('crop-note').hidden = !crop;
-  $('crop-hold').hidden = !(crop?.y && coarsePointer.matches);
+  $('crop-hold').hidden = !(crop && crop.y && coarsePointer.matches);
   $('position').hidden = !crop;
-  $('position-x').hidden = !crop?.x;
-  $('position-y').hidden = !crop?.y;
+  $('position-x').hidden = !(crop && crop.x);
+  $('position-y').hidden = !(crop && crop.y);
   stage.classList.toggle('can-pan', Boolean(crop));
   $('undo').disabled = adjustmentHistory.length === 0;
   for (const button of $('position').querySelectorAll('button')) {
@@ -562,8 +583,9 @@ function applyAdjustment(next) {
 function markEdited() {
   if (!isUserPhoto) return;
   unsaved = true;
-  if (savedNote) {
+  if (savedNote || madeNotSaved) {
     savedNote = false;
+    madeNotSaved = false;
     updateSave();
   }
 }
@@ -643,7 +665,7 @@ function startPan(event) {
   const {area} = previewLayout;
   const place = placement(image, options, area);
   const scale = preview.getBoundingClientRect().width / preview.width;
-  preview.setPointerCapture?.(event.pointerId);
+  if (preview.setPointerCapture) preview.setPointerCapture(event.pointerId);
   pan = {
     id: event.pointerId, x: event.clientX, y: event.clientY, start: options,
     rangeX: crop.x ? (place.w - area.w) * scale : 0,
@@ -689,7 +711,7 @@ preview.addEventListener('pointermove', event => {
 });
 // Once a held drag has started, keep the finger from scrolling the page.
 preview.addEventListener('touchmove', event => {
-  if (pan?.held && event.cancelable) event.preventDefault();
+  if (pan && pan.held && event.cancelable) event.preventDefault();
 }, {passive: false});
 // A long press would otherwise open the image menu on phones.
 preview.addEventListener('contextmenu', event => {
@@ -752,34 +774,45 @@ function exportName(frame) {
 }
 
 function showResult(opener) {
-  const canShare = Boolean(resultFile && navigator.canShare?.({files: [resultFile]}));
+  const canShare = Boolean(resultFile && navigator.canShare && navigator.canShare({files: [resultFile]}));
   // On iPhone and iPad, the share sheet is the direct way into Photos.
-  const shareFirst = canShare && isApple && !isWeChat;
+  const shareFirst = canShare && isApple && !longPressSave;
   share.hidden = !canShare;
   share.className = `button ${shareFirst ? 'primary' : 'secondary'}`;
-  download.className = `button ${shareFirst || isWeChat ? 'secondary' : 'primary'}`;
+  download.className = `button ${shareFirst || longPressSave ? 'secondary' : 'primary'}`;
   $('share-text').textContent = shareFirst ? '保存到相册' : '发给家人或其他应用';
   $('download-text').textContent = shareFirst ? '下载到文件' : '下载照片';
   const lead = $('result-lead');
   lead.classList.remove('saved');
-  lead.textContent = isWeChat
-    ? '在微信里：用手指按住上面的照片不放，选「保存图片」，就存进相册了。'
-    : shareFirst ? '成品做好了。点「保存到相册」，在弹出的菜单里选「存储图像」。'
-    : '成品做好了。点「下载照片」，存到这台设备。';
+  // Honest about the one step that is left: the photo is made, not yet saved.
+  $('result-title').textContent = longPressSave ? '还差一步：按住照片保存' : '还差一步：把照片存好';
+  lead.textContent = longPressSave
+    ? `${isWeChat ? '在微信里' : '在这里'}：用手指按住下面的照片不放，选「保存图片」，就存进相册了。也可以选「发送给朋友」。`
+    : shareFirst ? '点下面的「保存到相册」，在弹出的菜单里选「存储图像」。'
+    : '点下面的「下载照片」，存到这台设备。';
+  // In WeChat nothing tells the page whether the photo was saved, so it never claims either.
+  madeNotSaved = !longPressSave;
+  $('result-close').textContent = madeNotSaved ? '先不存，返回' : '返回挑相框';
   download.after(share);
   if (shareFirst) download.before(share);
   openDialog(resultDialog, opener);
 }
 
 // Saved: say so in the window and keep saying it on the page after it closes.
-function markSaved(message) {
+function markSaved(message, title = '✓ 照片已保存') {
   unsaved = false;
   savedNote = true;
+  madeNotSaved = false;
+  $('result-title').textContent = title;
+  $('result-close').textContent = '返回挑相框';
   const lead = $('result-lead');
   lead.textContent = message;
   lead.classList.add('saved');
   updateSave();
 }
+
+// Closing the window before saving leaves a note on the page that the photo is not saved yet.
+resultDialog.addEventListener('close', updateSave);
 
 save.addEventListener('click', () => {
   if (!save.disabled) void exportPhoto(save);
@@ -788,7 +821,7 @@ save.addEventListener('click', () => {
 // On Android phones the photo downloads straight away, so 保存照片 is one tap.
 // The window then only says where to find it. iPhone, iPad and WeChat need a tap of their own.
 function savesDirectly() {
-  return coarsePointer.matches && phoneLayout.matches && !isApple && !isWeChat;
+  return coarsePointer.matches && phoneLayout.matches && !isApple && !longPressSave;
 }
 
 async function exportPhoto(opener) {
@@ -811,7 +844,7 @@ async function exportPhoto(opener) {
     clearResult();
     resultUrl = URL.createObjectURL(blob);
     // WeChat's long-press menu cannot save a blob: picture, so give it the image data itself.
-    $('result-image').src = isWeChat ? await dataUrl(blob) : resultUrl;
+    $('result-image').src = longPressSave ? await dataUrl(blob) : resultUrl;
     if (version !== importVersion) return;
     download.href = resultUrl;
     const filename = exportName(frame);
@@ -833,8 +866,8 @@ async function exportPhoto(opener) {
 download.addEventListener('click', () => {
   $('share-status').textContent = '';
   markSaved(isApple
-    ? `✓ 已存好。在「文件」App 的「下载项」里，名字是「${download.download}」。`
-    : `✓ 已存到这台设备的「下载」里，名字是「${download.download}」。手机相册里一般也能看到。`);
+    ? `已存好。在「文件」App 的「下载项」里，名字是「${download.download}」。`
+    : `已存到这台设备的「下载」里，名字是「${download.download}」。手机相册里一般也能看到。`);
   $('download-text').textContent = '再存一次';
   track('photo_download_clicked');
 });
@@ -844,9 +877,10 @@ share.addEventListener('click', async () => {
   try {
     await navigator.share({files: [resultFile]});
     message.textContent = '';
-    if (isApple) markSaved('✓ 好了。如果选了「存储图像」，照片就在相册里。');
+    if (isApple) markSaved('如果选了「存储图像」，照片就在相册里了。', '✓ 好了');
     else {
       unsaved = false;
+      madeNotSaved = false;
       updateSave();
     }
     track('photo_share_completed');
@@ -863,7 +897,6 @@ function openFrameView(opener) {
   if (!image) return;
   const view = drawFramePreview(false);
   const long = Math.max(view.width / view.height, view.height / view.width);
-  $('zoom-actions').hidden = long < 2.2;
   const detail = $('frame-detail');
   detail.hidden = long < 3;
   detail.open = false;
@@ -883,28 +916,39 @@ function drawFramePreview(zoom) {
   const viewport = $('zoom-view');
   const settings = look(selected);
   const view = zoom
-    ? layout(image, selected, settings, 8192, 12_000_000)
+    ? layout(image, selected, settings, 8192, 12000000)
     : layout(image, selected, settings, previewEdge);
   paint(canvas, zoom ? image : previewSource, selected, settings, view);
   canvas.setAttribute('aria-label', selected.name + (zoom ? '相框放大预览' : '相框全图预览'));
   zoomed = zoom;
   const wide = view.width >= view.height;
+  // Long panoramas and tall photos scroll one way; other photos get twice as big
+  // and can be moved around with a finger to check faces.
+  const long = Math.max(view.width / view.height, view.height / view.width) >= 2.2;
   viewport.classList.toggle('zoomed', zoom);
-  viewport.classList.toggle('tall', zoom && !wide);
+  viewport.classList.toggle('tall', zoom && long && !wide);
+  viewport.classList.toggle('both', zoom && !long);
   viewport.tabIndex = zoom ? 0 : -1;
   canvas.style.width = '';
   canvas.style.height = '';
-  if (zoom && wide) canvas.style.height = `${Math.min(window.innerHeight * .5, view.height / pixelRatio())}px`;
+  if (zoom && long && wide) canvas.style.height = `${Math.min(window.innerHeight * .5, view.height / pixelRatio())}px`;
+  if (zoom && !long) canvas.style.width = `${Math.round(viewport.clientWidth * 2)}px`;
   viewport.scrollTo(0, 0);
+  if (zoom && !long) viewport.scrollTo((viewport.scrollWidth - viewport.clientWidth) / 2, (viewport.scrollHeight - viewport.clientHeight) / 2);
   const toggle = $('zoom-toggle');
   toggle.setAttribute('aria-pressed', String(zoom));
-  toggle.textContent = zoom ? '看整张' : '放大看清两端';
-  $('zoom-prev').hidden = $('zoom-next').hidden = $('zoom-hint').hidden = !zoom;
+  toggle.textContent = zoom ? '看整张' : long ? '放大看清两端' : '放大看清楚';
+  $('zoom-hint').hidden = !zoom;
+  $('zoom-prev').hidden = $('zoom-next').hidden = !zoom || !long;
   $('zoom-prev').textContent = wide ? '往左看' : '往上看';
   $('zoom-next').textContent = wide ? '往右看' : '往下看';
-  $('zoom-hint').textContent = wide ? '可以左右滑动查看照片两端的人。' : '可以上下滑动查看整张照片。';
+  $('zoom-hint').textContent = !long ? '用手指按住照片拖动，看看各处。点一下照片，回到整张。'
+    : wide ? '可以左右滑动查看照片两端的人。' : '可以上下滑动查看整张照片。';
   return view;
 }
+
+// A tap on the picture zooms in and out too, the way photo apps do.
+$('frame-preview').addEventListener('click', () => drawFramePreview(!zoomed));
 
 $('zoom-toggle').addEventListener('click', () => drawFramePreview(!zoomed));
 for (const [id, direction] of [['zoom-prev', -1], ['zoom-next', 1]]) {
@@ -937,11 +981,11 @@ function syncCaption() {
   $('words-summary').textContent = kind === 'travel' ? '写地点和日期' : '改相框上的祝福语';
 }
 
-function captionChanged() {
+function captionChanged(kinds = [selected.caption]) {
   markEdited();
   syncOptions();
   requestPreview();
-  refreshGalleryPreviews(selected.caption);
+  for (const kind of kinds) refreshGalleryPreviews(kind);
 }
 
 $('caption-on').addEventListener('change', event => {
@@ -949,9 +993,13 @@ $('caption-on').addEventListener('change', event => {
   $('caption-fields').hidden = !event.target.checked;
   captionChanged();
 });
+// A blessing someone typed goes along to every frame with a blessing, so changing
+// the frame never throws their words away (place names on travel frames stay apart).
 $('caption-text').addEventListener('input', event => {
-  captions[selected.caption].text = event.target.value;
-  captionChanged();
+  const kind = selected.caption;
+  const shared = kind === 'travel' ? [kind] : Object.keys(captions).filter(item => item !== 'travel');
+  for (const item of shared) captions[item].text = event.target.value;
+  captionChanged(shared);
 });
 $('caption-date').addEventListener('input', event => {
   captions[selected.caption].date = event.target.value;
@@ -1011,12 +1059,19 @@ function layoutPage() {
 }
 
 window.addEventListener('resize', scheduleLayout);
-for (const query of [phoneLayout, pinnedPhone, twoColumns]) query.addEventListener?.('change', scheduleLayout);
+// Safari before 14 and old Android browsers only know addListener.
+function onMediaChange(query, run) {
+  if (query.addEventListener) query.addEventListener('change', run);
+  else if (query.addListener) query.addListener(run);
+}
+for (const query of [phoneLayout, pinnedPhone, twoColumns]) onMediaChange(query, scheduleLayout);
+// Turning a tablet can switch between one-tap and two-tap saving.
+for (const query of [phoneLayout, coarsePointer]) onMediaChange(query, updateBar);
 if ('ResizeObserver' in window) {
   const watch = new ResizeObserver(scheduleLayout);
   for (const element of [$('bar'), $('dock'), filters, photoPanel]) watch.observe(element);
 }
-document.fonts?.ready.then(scheduleLayout);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(scheduleLayout);
 
 // The brand link only scrolls to the top, and leaving with unsaved work asks first.
 window.addEventListener('beforeunload', event => {
@@ -1035,7 +1090,7 @@ syncCaption();
 layoutPage();
 preview.hidden = true;
 $('stage-placeholder').hidden = false;
-loadImage(new URL('./example.webp', import.meta.url).href).then(sample => {
+loadImage('./assets/example.webp').then(sample => {
   if (isUserPhoto) return;
   setImage(sample);
   updateBar();
@@ -1046,3 +1101,5 @@ loadImage(new URL('./example.webp', import.meta.url).href).then(sample => {
   $('preview-label').textContent = '等待选图';
 });
 setupAnalytics();
+// Tells old.js that the page started; very old browsers never get here and see its note.
+window.frameAppReady = true;
