@@ -1,11 +1,12 @@
 // How long the page takes on a slow cross-border link, like opening it from
 // mainland China (about 230 ms per round trip, a few Mbit/s). Measures the time
-// until the example photo shows in a frame:
+// until the buttons work (the script has started) and until the example photo shows in a frame:
 //   - first visit, as the page is now;
 //   - first visit without the script preloads (how it was before), for comparison;
 //   - second visit, from the copy the service worker saved.
-// Served over HTTP/2 like Cloudflare does (a throwaway certificate from openssl),
-// since over HTTP/1.1 the browser opens only six connections and queues the rest.
+// Served over HTTP/2 and gzipped like Cloudflare does (a throwaway certificate from
+// openssl), since over HTTP/1.1 the browser opens only six connections and queues
+// the rest, and uncompressed scripts would make the link look slower than it is.
 // Prints the numbers; it fails only if the page does not load.
 // Needs the playwright package, a Chromium and openssl; set CHROMIUM_PATH to use another build.
 import {execFileSync} from 'node:child_process';
@@ -14,6 +15,7 @@ import {readFile} from 'node:fs/promises';
 import {createSecureServer} from 'node:http2';
 import {tmpdir} from 'node:os';
 import {extname, join, normalize} from 'node:path';
+import {gzipSync} from 'node:zlib';
 import {chromium} from 'playwright';
 import {docs} from './serve.mjs';
 
@@ -28,8 +30,15 @@ function serve() {
     async (request, response) => {
       const path = normalize(decodeURIComponent(new URL(request.url, 'https://x').pathname)).replace(/^(\.\.[/\\])+/, '');
       try {
-        const body = await readFile(join(docs, path.endsWith('/') ? path + 'index.html' : path));
-        response.writeHead(200, {'content-type': types[extname(path)] || 'text/html; charset=utf-8'});
+        const file = path.endsWith('/') ? path + 'index.html' : path;
+        const type = types[extname(file)] || 'text/html; charset=utf-8';
+        let body = await readFile(join(docs, file));
+        const headers = {'content-type': type};
+        if (/text|svg/.test(type) && /gzip/.test(request.headers['accept-encoding'] || '')) {
+          body = gzipSync(body);
+          headers['content-encoding'] = 'gzip';
+        }
+        response.writeHead(200, headers);
         response.end(body);
       } catch {
         response.writeHead(404);
@@ -54,11 +63,13 @@ async function slow(page) {
 }
 
 // Polls inside the page (the page's CSP blocks Playwright's string-based waits) and
-// returns the time since the navigation started.
+// returns the times since the navigation started: [script started, photo shown].
 const shown = page => page.evaluate(() => new Promise(resolve => {
+  let ready = 0;
   const tick = () => {
+    if (!ready && window.frameAppReady) ready = performance.now();
     const preview = document.getElementById('preview');
-    if (preview && !preview.hidden && /示例/.test(preview.getAttribute('aria-label') || '')) resolve(performance.now());
+    if (ready && preview && !preview.hidden && /示例/.test(preview.getAttribute('aria-label') || '')) resolve([ready, performance.now()]);
     else requestAnimationFrame(tick);
   };
   tick();
@@ -97,7 +108,7 @@ const median = list => [...list].sort((a, b) => a - b)[Math.floor(list.length / 
 async function measure(run) {
   const times = [];
   for (let i = 0; i < runs; i++) times.push(await run());
-  return Math.round(median(times));
+  return [0, 1].map(at => Math.round(median(times.map(pair => pair[at]))));
 }
 
 try {
@@ -106,8 +117,8 @@ try {
     ['first visit, now', await measure(() => firstVisit(false))],
     ['second visit, from the saved copy', await measure(secondVisit)],
   ];
-  console.log(`Time until the example photo shows, ${link.latency} ms round trip, median of ${runs}:`);
-  for (const [name, ms] of rows) console.log(`  ${name}: ${ms} ms`);
+  console.log(`${link.latency} ms round trip, ${link.downloadThroughput * 8 / 1e6} Mbit/s, median of ${runs}:`);
+  for (const [name, [ready, photo]] of rows) console.log(`  ${name}: buttons work at ${ready} ms, photo shows at ${photo} ms`);
 } finally {
   await browser.close();
   server.close();
