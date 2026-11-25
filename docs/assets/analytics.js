@@ -1,4 +1,4 @@
-import {openDialog, closeDialog} from './dialog.js?v=11';
+import {openDialog, closeDialog} from './dialog.js?v=12';
 
 // Set this to the Measurement ID of the production GA4 web stream.
 const measurementId = 'G-E4XXBC3ML7';

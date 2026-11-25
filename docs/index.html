@@ -14,9 +14,9 @@
   <meta property="og:description" content="39 款免费相框，选照片、挑相框、保存。照片留在自己的设备上。">
   <meta property="og:url" content="https://img.hackx64.eu.org/">
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./assets/style.css?v=11">
+  <link rel="stylesheet" href="./assets/style.css?v=12">
   <link rel="preload" as="image" href="./assets/example.webp" type="image/webp">
-  <script type="module" src="./assets/app.js?v=11"></script>
+  <script type="module" src="./assets/app.js?v=12"></script>
 </head>
 <body>
   <svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -27,6 +27,8 @@
     <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4.4 1.6c-.8.8-1.9 1.2-1.9 2.4m0 3h.01"/></symbol>
     <symbol id="i-adjust" viewBox="0 0 24 24"><path d="M3 7h6m4 0h8M3 17h9m4 0h5M9 4v6m7 4v6"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5M11 8v6m-3-3h6"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 6V4h14v2M12 4v16m-3 0h6"/></symbol>
   </svg>
   <a class="skip" href="#editor">跳到相框工具</a>
   <header class="top" id="top">
@@ -35,7 +37,7 @@
         <span class="brand-mark"><svg><use href="#i-brand"/></svg></span>
         <span>拾光相框</span>
       </a>
-      <button class="help-button" type="button" id="help-open"><svg class="icon"><use href="#i-help"/></svg> 使用帮助</button>
+      <button class="help-button" type="button" id="help-open" aria-label="使用帮助"><svg class="icon"><use href="#i-help"/></svg> <span class="wide-only">使用帮助</span><span class="phone-only">帮助</span></button>
     </div>
   </header>
   <main class="shell">
@@ -57,56 +59,79 @@
           <button class="button primary" type="button" id="pick"><svg class="icon"><use href="#i-photo"/></svg> <span id="pick-text"><span class="phone-pick">从相册选照片</span><span class="desktop-pick">选择照片</span></span></button>
           <input id="file" type="file" accept="image/*,.heic,.heif" hidden>
           <span class="file-hint" id="file-hint">免费，会另存一张，原照片还在</span>
-          <button class="button secondary go-frames" type="button" id="go-frames" hidden>去挑相框</button>
         </div>
         <div class="dock" id="dock">
+          <div class="viewer">
+            <div class="stage" id="stage">
+              <canvas id="preview" width="640" height="480" role="img" aria-label="照片加相框预览"></canvas>
+              <span class="stage-placeholder" id="stage-placeholder" hidden>选一张照片，就能在这里看到套框效果</span>
+              <span class="stage-badge" id="stage-badge" aria-hidden="true"></span>
+            </div>
+            <div class="dock-tools" id="dock-tools" hidden>
+              <details class="sheet adjust" id="adjust">
+                <summary><svg class="icon"><use href="#i-adjust"/></svg> <span class="wide-only">调整照片</span><span class="phone-only">调整</span> <span class="chevron" aria-hidden="true"></span></summary>
+                <div class="sheet-body adjust-body" role="group" aria-label="调整照片">
+                  <p class="sheet-title">调整照片 <span>（不调也可以）</span></p>
+                  <p class="choice-title" id="ratio-title">照片形状</p>
+                  <div class="choices shapes" id="ratio-choices" role="group" aria-labelledby="ratio-title">
+                    <button type="button" class="choice" data-ratio="original" aria-label="照原样，跟原照片一样"><span class="shape shape-original" aria-hidden="true"></span>照原样</button>
+                    <button type="button" class="choice" data-ratio="1" aria-label="正方形"><span class="shape" style="--r: 1" aria-hidden="true"></span>正方形</button>
+                    <button type="button" class="choice" data-ratio="0.75" aria-label="竖版，3比4"><span class="shape" style="--r: .75" aria-hidden="true"></span>竖版</button>
+                    <button type="button" class="choice" data-ratio="1.3333333333333333" aria-label="横版，4比3"><span class="shape" style="--r: 1.3333" aria-hidden="true"></span>横版</button>
+                    <button type="button" class="choice" data-ratio="0.5625" aria-label="竖长条，像手机屏幕"><span class="shape" style="--r: .5625" aria-hidden="true"></span>竖长条</button>
+                    <button type="button" class="choice" data-ratio="1.7777777777777777" aria-label="横长条，像电视屏幕"><span class="shape" style="--r: 1.7778" aria-hidden="true"></span>横长条</button>
+                  </div>
+                  <div class="fit-area" id="fit-area" hidden>
+                    <p class="choice-title" id="fit-title">照片怎么放</p>
+                    <div class="choices" id="fit-choices" role="group" aria-labelledby="fit-title">
+                      <button type="button" class="choice" data-fit="contain"><span class="fit-icon fit-contain" aria-hidden="true"></span>整张放下</button>
+                      <button type="button" class="choice" data-fit="cover"><span class="fit-icon fit-cover" aria-hidden="true"></span>填满相框</button>
+                    </div>
+                  </div>
+                  <p class="crop-note" id="crop-note" role="status" hidden><strong id="crop-side">照片两边被剪掉了一点。</strong>可以拖动照片<span id="crop-hold" hidden>（先用手指按住照片片刻，再上下拖动）</span>，或用下面的按钮挪一挪。</p>
+                  <div class="position" id="position" role="group" hidden aria-label="挪一挪照片">
+                    <div class="adjust-actions" id="position-x">
+                      <button type="button" class="button secondary" data-axis="x" data-step="10">往左挪</button>
+                      <button type="button" class="button secondary" data-axis="x" data-step="-10">往右挪</button>
+                    </div>
+                    <div class="adjust-actions" id="position-y">
+                      <button type="button" class="button secondary" data-axis="y" data-step="10">往上挪</button>
+                      <button type="button" class="button secondary" data-axis="y" data-step="-10">往下挪</button>
+                    </div>
+                  </div>
+                  <div class="adjust-actions">
+                    <button type="button" class="button secondary" id="rotate">转一下</button>
+                    <button type="button" class="button secondary" id="undo" disabled>撤销</button>
+                    <button type="button" class="button secondary" id="reset">恢复原样</button>
+                  </div>
+                  <div class="sheet-done"><button type="button" class="button primary" data-close-sheet>调好了</button></div>
+                </div>
+              </details>
+              <details class="sheet words" id="words" hidden>
+                <summary><svg class="icon"><use href="#i-text"/></svg> <span class="wide-only" id="words-summary">改相框上的字</span><span class="phone-only">改字</span> <span class="chevron" aria-hidden="true"></span></summary>
+                <div class="sheet-body words-body" role="group" aria-label="相框上的字">
+                  <p class="sheet-title">相框上的字</p>
+                  <label class="check"><input type="checkbox" id="caption-on" checked> <span id="caption-on-text">加一句祝福</span></label>
+                  <div class="caption-fields" id="caption-fields">
+                    <label for="caption-text" id="caption-text-label">祝福语</label>
+                    <input id="caption-text" type="text" maxlength="16" autocomplete="off" enterkeyhint="done">
+                    <div class="caption-row" id="caption-date-row" hidden>
+                      <label for="caption-date">日期</label>
+                      <input id="caption-date" type="text" maxlength="16" autocomplete="off" enterkeyhint="done">
+                    </div>
+                  </div>
+                  <div class="sheet-done"><button type="button" class="button primary" data-close-sheet>写好了</button></div>
+                </div>
+              </details>
+              <button class="button secondary dock-view" type="button" id="dock-view" disabled><svg class="icon"><use href="#i-zoom"/></svg> 看大图</button>
+            </div>
+          </div>
           <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
-          <button type="button" class="button secondary retry-photo" id="retry-photo" hidden>重新选照片</button>
-          <div class="stage" id="stage">
-            <canvas id="preview" width="640" height="480" role="img" aria-label="照片加相框预览"></canvas>
-            <span class="stage-placeholder" id="stage-placeholder" hidden>选一张照片，就能在这里看到套框效果</span>
-            <span class="stage-badge" id="stage-badge" aria-hidden="true"></span>
-          </div>
-          <div class="dock-tools">
-            <details class="adjust" id="adjust">
-              <summary><svg class="icon"><use href="#i-adjust"/></svg> 调整照片 <span class="chevron" aria-hidden="true"></span></summary>
-              <div class="adjust-body">
-                <p class="sheet-title">调整照片 <span>（不调也可以）</span></p>
-                <label for="ratio">成品比例</label>
-                <select id="ratio">
-                  <option value="original">跟随原图比例</option>
-                  <option value="1">正方形 1∶1</option>
-                  <option value="0.75">竖图 3∶4</option>
-                  <option value="0.5625">竖屏 9∶16</option>
-                  <option value="1.3333333333333333">横图 4∶3</option>
-                  <option value="1.7777777777777777">宽屏 16∶9</option>
-                </select>
-                <label for="fit" id="fit-label">照片放置</label>
-                <select id="fit">
-                  <option value="contain">显示整张照片</option>
-                  <option value="cover">铺满相框</option>
-                </select>
-                <p class="crop-note" id="crop-note" hidden>铺满相框会剪掉照片的一部分。可以在预览图上拖动照片<span id="crop-hold" hidden>（手机上先用手指按住照片片刻，再上下拖动）</span>，或用下面的按钮调整位置。</p>
-                <div class="position" id="position" role="group" hidden aria-label="微调照片的位置">
-                  <div class="adjust-actions" id="position-x">
-                    <button type="button" class="button secondary" data-axis="x" data-step="10">向左移</button>
-                    <button type="button" class="button secondary" data-axis="x" data-step="-10">向右移</button>
-                  </div>
-                  <div class="adjust-actions" id="position-y">
-                    <button type="button" class="button secondary" data-axis="y" data-step="10">向上移</button>
-                    <button type="button" class="button secondary" data-axis="y" data-step="-10">向下移</button>
-                  </div>
-                </div>
-                <div class="adjust-actions">
-                  <button type="button" class="button secondary" id="rotate">顺时针旋转</button>
-                  <button type="button" class="button secondary" id="undo" disabled>撤销上一步</button>
-                  <button type="button" class="button secondary" id="reset">恢复默认</button>
-                </div>
-                <button type="button" class="button primary adjust-done" id="adjust-done">调好了</button>
-              </div>
-            </details>
-            <button class="button secondary dock-view" type="button" id="dock-view" disabled>看大图</button>
-          </div>
+          <details class="status-help" id="status-help" hidden>
+            <summary>怎么办？</summary>
+            <p id="status-help-text"></p>
+          </details>
+          <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
         </div>
       </section>
 
@@ -119,30 +144,18 @@
         <div class="save-area" role="group" aria-label="当前相框和成品操作">
           <p id="current-frame" aria-live="polite"></p>
           <div class="frame-actions">
-            <button class="button secondary view-frame" type="button" id="view-frame" disabled><canvas id="mini-preview" width="1" height="1" aria-hidden="true"></canvas><span>看大图</span></button>
+            <button class="button secondary view-frame" type="button" id="view-frame" disabled><svg class="icon"><use href="#i-zoom"/></svg> <span>看大图</span></button>
             <button class="button save" type="button" id="save" disabled><span id="save-text">做好这张照片</span></button>
           </div>
           <p class="save-hint" id="save-hint">先选一张自己的照片</p>
           <p class="status error" id="save-status" role="status"></p>
         </div>
-        <fieldset class="caption" id="caption" hidden>
-          <legend>相框上的字</legend>
-          <label class="check"><input type="checkbox" id="caption-on" checked> <span id="caption-on-text">加一句祝福</span></label>
-          <div class="caption-fields" id="caption-fields">
-            <label for="caption-text" id="caption-text-label">祝福语</label>
-            <input id="caption-text" type="text" maxlength="16" autocomplete="off">
-            <div class="caption-row" id="caption-date-row" hidden>
-              <label for="caption-date">日期</label>
-              <input id="caption-date" type="text" maxlength="16" autocomplete="off">
-            </div>
-          </div>
-        </fieldset>
         <div class="frame-grid" id="frames" role="group" aria-label="相框款式"></div>
         <button class="more" type="button" id="more" aria-controls="frames" aria-expanded="false" hidden>查看更多相框 <span class="chevron" aria-hidden="true"></span></button>
       </section>
     </section>
     <div class="bar" id="bar" role="group" aria-label="选照片和保存">
-      <p class="bar-hint" id="bar-hint"></p>
+      <p class="bar-hint" id="bar-hint" aria-live="polite"></p>
       <div class="bar-actions">
         <button class="button secondary" type="button" id="bar-pick" hidden>换照片</button>
         <button class="button primary" type="button" id="bar-main"><svg class="icon" id="bar-icon"><use href="#i-photo"/></svg> <span id="bar-main-text">从相册选照片</span></button>
@@ -158,8 +171,8 @@
       <h2 id="help-title">怎样给照片加相框？</h2>
       <ol>
         <li>先从相册或文件里选一张自己的照片。电脑上也可以把照片拖进页面，或复制后按 Ctrl+V 粘贴。</li>
-        <li>点喜欢的相框，上面的预览马上换好。默认保留整张照片和原图比例，长图也能套框。想改比例或旋转，点「调整照片」；不调也可以。</li>
-        <li>点「保存照片」（电脑上是「做好这张照片」），再在成品窗口保存。iPhone 和 iPad 上点「保存到相册」，其他设备点「下载照片」。</li>
+        <li>点喜欢的相框，上面的预览马上换好。点上面的分类（节庆、花卉等）可以只看这一类。想改形状或转方向，点「调整」；不调也可以。</li>
+        <li>点「保存照片」。安卓手机会直接存进「下载」；iPhone 和 iPad 上再点「保存到相册」；电脑上是「做好这张照片」，再点「下载照片」。存好后底部会显示「已保存」。</li>
       </ol>
       <p>照片处理都在这台设备上完成。遇到打不开的照片，可以在相册里另存为 JPG 或 PNG，再选一次。</p>
       <form method="dialog"><button class="button primary">我知道了</button></form>
@@ -201,7 +214,7 @@
   <dialog id="result-dialog" aria-labelledby="result-title">
     <div class="dialog-inner">
       <h2 id="result-title">相框照片做好了</h2>
-      <p id="result-lead" aria-live="polite">还差一步。点「下载照片」，把成品存到设备。</p>
+      <p id="result-lead" class="result-lead" aria-live="polite">还差一步。点「下载照片」，把成品存到设备。</p>
       <img id="result-image" alt="加好相框的成品照片">
       <div class="result-actions">
         <a class="button primary" id="result-download" download><svg class="icon"><use href="#i-save"/></svg> <span id="download-text">下载照片</span></a>
@@ -214,7 +227,7 @@
         <p>想存进相册时，可以打开下载的图片，再从系统菜单选择「存储图像」或类似选项。手机浏览器如果支持，也可以长按上面的成品，选择保存图片。</p>
         <p>如果微信里无法下载，可用右上角菜单在浏览器打开。请在离开前尝试保存，在新浏览器中需重新选图套框。</p>
       </details>
-      <form method="dialog"><button class="button secondary">继续编辑</button></form>
+      <form method="dialog"><button class="button secondary" id="result-close">返回</button></form>
     </div>
   </dialog>
 </body>
