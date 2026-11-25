@@ -31,7 +31,15 @@ jobs:
           SHOT_DIR: screenshots
       - name: Speed on a slow cross-border link (like opening it from mainland China)
         if: always()
-        run: node tools/speed.mjs
+        # Also measures the version before this change (the PR's base, or the
+        # previous commit on main), when it can be fetched.
+        env:
+          BEFORE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BEFORE" ] && git fetch --depth=1 origin "$BEFORE" && git worktree add --detach "$RUNNER_TEMP/before" "$BEFORE"; then
+            export BEFORE_DOCS="$RUNNER_TEMP/before/docs"
+          fi
+          node tools/speed.mjs
       - name: Elder-friendly layout checks (phones, large text, zoom, tablets, computers)
         if: always()
         run: node tools/ux.mjs

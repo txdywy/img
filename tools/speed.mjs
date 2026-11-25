@@ -1,15 +1,19 @@
-// How long the page takes on a slow cross-border link, like opening it from
-// mainland China (about 230 ms per round trip, a few Mbit/s). Measures the time
-// until the buttons work (the script has started) and until the example photo shows in a frame:
-//   - first visit, as the page is now;
-//   - first visit without the script preloads (how it was before), for comparison;
-//   - second visit, from the copy the service worker saved.
-// Served over HTTP/2 and gzipped like Cloudflare does (a throwaway certificate from
-// openssl), since over HTTP/1.1 the browser opens only six connections and queues
-// the rest, and uncompressed scripts would make the link look slower than it is.
+// How long the page takes on a cross-border link, like opening it from mainland
+// China (about 230 ms per round trip). For each link speed it measures:
+//   - first visit: nothing saved yet;
+//   - second visit: the browser's saved files have expired (the next day, say), so
+//     without a service worker each one is checked with the server again.
+// Each gives the time until the buttons work (the script has started) and until
+// the example photo shows in a frame. Set BEFORE_DOCS to another copy of docs/
+// (CI uses the version before this change) to measure that too, for comparison.
+//
+// Served over HTTP/2 and gzipped like Cloudflare, with ETags like GitHub Pages:
+// over HTTP/1.1 the browser opens only six connections and queues the rest, and
+// uncompressed scripts would make the link look slower than it is.
 // Prints the numbers; it fails only if the page does not load.
 // Needs the playwright package, a Chromium and openssl; set CHROMIUM_PATH to use another build.
 import {execFileSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {mkdtempSync, readFileSync, rmSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import {createSecureServer} from 'node:http2';
@@ -38,107 +42,102 @@ function certificate() {
   }
 }
 
-function serve() {
-  const server = createSecureServer({...certificate(), allowHTTP1: true},
-    async (request, response) => {
-      const path = normalize(decodeURIComponent(new URL(request.url, 'https://x').pathname)).replace(/^(\.\.[/\\])+/, '');
-      try {
-        const file = path.endsWith('/') ? path + 'index.html' : path;
-        const type = types[extname(file)] || 'text/html; charset=utf-8';
-        let body = await readFile(join(docs, file));
-        const headers = {'content-type': type};
-        if (/text|svg/.test(type) && /gzip/.test(request.headers['accept-encoding'] || '')) {
-          body = gzipSync(body);
-          headers['content-encoding'] = 'gzip';
-        }
-        response.writeHead(200, headers);
-        response.end(body);
-      } catch {
-        response.writeHead(404);
+function serve(root) {
+  const server = createSecureServer({...certificate(), allowHTTP1: true}, async (request, response) => {
+    const path = normalize(decodeURIComponent(new URL(request.url, 'https://x').pathname)).replace(/^(\.\.[/\\])+/, '');
+    try {
+      const file = path.endsWith('/') ? path + 'index.html' : path;
+      const type = types[extname(file)] || 'text/html; charset=utf-8';
+      let body = await readFile(join(root, file));
+      const etag = `"${createHash('sha1').update(body).digest('hex')}"`;
+      // Expired at once, so a later visit has to ask again: what a browser does with
+      // GitHub Pages' 10-minute cache on any visit after the first few minutes.
+      const headers = {'content-type': type, etag, 'cache-control': 'no-cache'};
+      if (request.headers['if-none-match'] === etag) {
+        response.writeHead(304, headers);
         response.end();
+        return;
       }
-    });
+      if (/text|svg/.test(type) && /gzip/.test(request.headers['accept-encoding'] || '')) {
+        body = gzipSync(body);
+        headers['content-encoding'] = 'gzip';
+      }
+      response.writeHead(200, headers);
+      response.end(body);
+    } catch {
+      response.writeHead(404);
+      response.end();
+    }
+  });
   return new Promise(resolve => server.listen(0, '127.0.0.1', () =>
     resolve({url: `https://localhost:${server.address().port}/`, close: () => server.close()})));
 }
 
 // A slow and a typical cross-border mobile link, both at ~230 ms per round trip.
 const links = [4, 20].map(mbit => ({offline: false, latency: 230, downloadThroughput: mbit * 1e6 / 8, uploadThroughput: 1e6 / 8}));
-let link = links[0];
 const runs = 5;
-const server = await serve();
 // Accept the test certificate: the launch flag covers the page and the service
 // worker (which ignores the context option); ignoreHTTPSErrors covers Playwright's
-// own requests, like the page rewrite in firstVisit.
+// own requests.
 const browser = await chromium.launch({executablePath: process.env.CHROMIUM_PATH || undefined,
   args: ['--ignore-certificate-errors', '--host-resolver-rules=MAP localhost 127.0.0.1']});
 
-async function slow(page) {
-  const cdp = await page.context().newCDPSession(page);
+// Opens the page on the slow link and returns it with the times since the
+// navigation started: [script started, photo shown]. Polls inside the page, since
+// the page's CSP blocks Playwright's string-based waits.
+async function open(context, url, link) {
+  const page = await context.newPage();
+  const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
   await cdp.send('Network.emulateNetworkConditions', link);
+  await page.goto(url, {waitUntil: 'domcontentloaded'});
+  const times = await page.evaluate(() => new Promise(resolve => {
+    let ready = 0;
+    const tick = () => {
+      if (!ready && window.frameAppReady) ready = performance.now();
+      const preview = document.getElementById('preview');
+      if (ready && preview && !preview.hidden && /示例/.test(preview.getAttribute('aria-label') || '')) resolve([ready, performance.now()]);
+      else requestAnimationFrame(tick);
+    };
+    tick();
+  }));
+  return {page, times};
 }
 
-// Polls inside the page (the page's CSP blocks Playwright's string-based waits) and
-// returns the times since the navigation started: [script started, photo shown].
-const shown = page => page.evaluate(() => new Promise(resolve => {
-  let ready = 0;
-  const tick = () => {
-    if (!ready && window.frameAppReady) ready = performance.now();
-    const preview = document.getElementById('preview');
-    if (ready && preview && !preview.hidden && /示例/.test(preview.getAttribute('aria-label') || '')) resolve([ready, performance.now()]);
-    else requestAnimationFrame(tick);
-  };
-  tick();
-}));
-
-async function firstVisit(withoutPreloads) {
-  const context = await browser.newContext({serviceWorkers: 'block', ignoreHTTPSErrors: true, viewport: {width: 390, height: 844}});
-  const page = await context.newPage();
-  if (withoutPreloads) {
-    await page.route(server.url, async route => {
-      const response = await route.fetch();
-      const html = (await response.text()).replace(/\s*<link rel="modulepreload"[^>]*>/g, '');
-      await route.fulfill({response, body: html});
-    });
-  }
-  await slow(page);
-  await page.goto(server.url, {waitUntil: 'domcontentloaded'});
-  const time = await shown(page);
-  await context.close();
-  return time;
-}
-
-async function secondVisit() {
+async function visits(url, link) {
   const context = await browser.newContext({ignoreHTTPSErrors: true, viewport: {width: 390, height: 844}});
-  const page = await context.newPage();
-  await page.goto(server.url);
-  await page.evaluate(() => navigator.serviceWorker.ready);
-  await slow(page);
-  await page.reload({waitUntil: 'domcontentloaded'});
-  const time = await shown(page);
+  const first = await open(context, url, link);
+  // If the page has a service worker, let it finish saving its copy.
+  await first.page.waitForLoadState('load');
+  await first.page.evaluate(async () => {
+    if ('serviceWorker' in navigator && await navigator.serviceWorker.getRegistration()) {
+      await Promise.race([navigator.serviceWorker.ready, new Promise(resolve => setTimeout(resolve, 10000))]);
+    }
+  });
+  await first.page.close();
+  const second = await open(context, url, link);
   await context.close();
-  return time;
+  return [first.times, second.times];
 }
 
 const median = list => [...list].sort((a, b) => a - b)[Math.floor(list.length / 2)];
-async function measure(run) {
-  const times = [];
-  for (let i = 0; i < runs; i++) times.push(await run());
-  return [0, 1].map(at => Math.round(median(times.map(pair => pair[at]))));
+async function measure(url, link) {
+  const all = [];
+  for (let i = 0; i < runs; i++) all.push(await visits(url, link));
+  return [0, 1].map(visit => [0, 1].map(at => Math.round(median(all.map(run => run[visit][at])))));
 }
 
+const sites = [['now', await serve(docs)]];
+if (process.env.BEFORE_DOCS) sites.unshift(['before', await serve(process.env.BEFORE_DOCS)]);
 try {
-  for (link of links) {
-    const rows = [
-      ['first visit, before (no script preloads)', await measure(() => firstVisit(true))],
-      ['first visit, now', await measure(() => firstVisit(false))],
-      ['second visit, from the saved copy', await measure(secondVisit)],
-    ];
+  for (const link of links) {
     console.log(`${link.latency} ms round trip, ${link.downloadThroughput * 8 / 1e6} Mbit/s, median of ${runs}:`);
-    for (const [name, [ready, photo]] of rows) console.log(`  ${name}: buttons work at ${ready} ms, photo shows at ${photo} ms`);
+    for (const [name, site] of sites) {
+      const [first, second] = await measure(site.url, link);
+      console.log(`  ${name}: first visit: buttons ${first[0]} ms, photo ${first[1]} ms; second visit: buttons ${second[0]} ms, photo ${second[1]} ms`);
+    }
   }
 } finally {
   await browser.close();
-  server.close();
+  for (const [, site] of sites) site.close();
 }

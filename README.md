@@ -32,7 +32,7 @@ GitHub 仓库的 **Settings → Pages → Build and deployment** 使用 **Deploy
 
 ### 国内打开速度
 
-网站走 Cloudflare 海外节点，从国内每个来回约 0.2~0.27 秒，所以页面尽量少等来回：`index.html` 用 `modulepreload` 一次请求全部脚本（新增模块时在这里加一行，版本号同样要统一）；示例照片压到 960×720、约 80 KB；`docs/sw.js` 在第一次打开后把页面和文件存在手机上，之后再开直接用存好的文件，没网也能打开。页面本身有网时总是取最新的，带 `?v=` 的文件按版本保存，换版本后旧文件自动清掉。iPhone 微信没有 Service Worker，照常从网络加载。要整体停用，把 `docs/sw.js` 换成调用 `self.registration.unregister()` 并删除缓存的版本。`tools/speed.mjs` 模拟 230 ms 来回的跨境网络，量出示例照片显示的时间，在 GitHub Actions 里随测试一起跑。
+网站走 Cloudflare 海外节点，从国内每个来回约 0.2~0.27 秒，所以页面尽量少等来回：示例照片压到 960×720、约 80 KB；`docs/sw.js` 在第一次打开后把页面和文件存在手机上，之后再开直接用存好的文件，没网也能打开。页面本身有网时总是取最新的，带 `?v=` 的文件按版本保存，换版本后旧文件自动清掉。iPhone 微信没有 Service Worker，照常从网络加载。要整体停用，把 `docs/sw.js` 换成调用 `self.registration.unregister()` 并删除缓存的版本。`tools/speed.mjs` 模拟 230 ms 来回的跨境网络，量出按钮能用和示例照片显示的时间（第一次打开和隔天再开），在 GitHub Actions 里随测试一起跑，并和改动前的版本对比。曾试过用 `modulepreload` 提前请求全部脚本，实测没有更快（慢网下反而让示例照片晚出现），所以没有用。
 
 Cloudflare 后台可以再开（免费）：Speed → Optimization 里的 HTTP/3、0-RTT 和 Early Hints；Caching → Cache Rules 加一条，让 `img.hackx64.eu.org/assets/` 下带 `?v=` 的文件浏览器和边缘都缓存一年，HTML 保持可重新验证。
 
