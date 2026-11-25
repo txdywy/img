@@ -65,7 +65,7 @@ const shown = page => page.evaluate(() => new Promise(resolve => {
 }));
 
 async function firstVisit(withoutPreloads) {
-  const context = await browser.newContext({serviceWorkers: 'block', viewport: {width: 390, height: 844}});
+  const context = await browser.newContext({serviceWorkers: 'block', ignoreHTTPSErrors: true, viewport: {width: 390, height: 844}});
   const page = await context.newPage();
   if (withoutPreloads) {
     await page.route(server.url, async route => {
