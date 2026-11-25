@@ -361,7 +361,10 @@ async function importPhoto(file) {
     track('photo_selected');
   } catch {
     if (version !== importVersion) return;
-    if (await isHeic(file)) {
+    const heic = await isHeic(file);
+    // Another photo may have been chosen while the file was checked.
+    if (version !== importVersion) return;
+    if (heic) {
       showImportError('这张是苹果手机常用的 HEIC 格式，这个浏览器打不开。可以先把它转成 JPG 再选：在相册里编辑后另存一份，或者给照片截个屏。在 iPhone 上用 Safari 打开本网站，也能直接选。');
     } else if (file.type && !file.type.startsWith('image/')) {
       showImportError('这不是照片文件。请选一张照片。');
