@@ -521,6 +521,11 @@ function endPan(event) {
 preview.addEventListener('pointerup', endPan);
 preview.addEventListener('pointercancel', endPan);
 
+// Resolves after the browser has drawn the page once more.
+function nextPaint() {
+  return new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve)));
+}
+
 function encode(canvas) {
   return new Promise((resolve, reject) => {
     canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Empty output')), 'image/jpeg', .94);
@@ -572,6 +577,9 @@ save.addEventListener('click', async () => {
   const settings = look(frame);
   const canvas = document.createElement('canvas');
   try {
+    // Painting the full-size photo blocks the page, so show "正在制作…" first.
+    await nextPaint();
+    if (version !== importVersion) return;
     paint(canvas, photo, frame, settings, layout(photo, frame, settings, exportEdge, exportPixels));
     const blob = await encode(canvas);
     if (version !== importVersion) return;
