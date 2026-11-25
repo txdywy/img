@@ -45,10 +45,25 @@ for (const name of profiles) {
   const context = await browser.newContext({...devices[name], acceptDownloads: true});
   const page = await context.newPage();
   page.on('pageerror', error => errors.push(`${at} page error: ${error.message}`));
-  page.on('console', message => message.type() === 'error' && errors.push(`${at} console: ${message.text()}`));
-  // caret: 'initial' stops Playwright adding a <style> to hide the cursor, which the
-  // page's Content Security Policy refuses (and WebKit logs) because style-src is 'self'.
-  const shoot = step => shots && page.screenshot({path: join(shots, `${name.replace(/\W+/g, '-')}-${step}.png`), caret: 'initial'});
+  // Playwright's WebKit screenshot always adds a <style> to line up animations; the
+  // page's Content Security Policy (style-src 'self') refuses it and WebKit logs that.
+  // Only that message, and only while a screenshot is being taken, is not the page's.
+  let shooting = false;
+  page.on('console', message => {
+    if (message.type() !== 'error') return;
+    if (shooting && /^Refused to apply a stylesheet/.test(message.text())) return;
+    errors.push(`${at} console: ${message.text()}`);
+  });
+  const shoot = async step => {
+    if (!shots) return;
+    shooting = true;
+    try {
+      await page.screenshot({path: join(shots, `${name.replace(/\W+/g, '-')}-${step}.png`)});
+      await page.waitForTimeout(100);
+    } finally {
+      shooting = false;
+    }
+  };
   try {
     await page.goto(server.url);
     if (!(await waitFor(page, () => window.frameAppReady === true))) errors.push(`${at}: the page script did not start`);
