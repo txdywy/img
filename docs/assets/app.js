@@ -548,6 +548,7 @@ $('position').addEventListener('click', event => {
 });
 $('rotate').addEventListener('click', () => applyAdjustment({rotation: (options.rotation + 90) % 360}));
 $('reset').addEventListener('click', () => applyAdjustment(defaults));
+$('adjust').addEventListener('toggle', () => $('dock').classList.toggle('sheet-open', $('adjust').open));
 $('adjust-done').addEventListener('click', () => {
   $('adjust').open = false;
   $('adjust').querySelector('summary').focus({preventScroll: true});
