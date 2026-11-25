@@ -71,7 +71,20 @@ async function open(setup) {
   return page;
 }
 
-const settle = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 60)))));
+// Waits until the page has stopped moving: the page glides (smooth scrolling) to
+// show the frames after a photo or a category, so measure only once it is still.
+const settle = page => page.evaluate(() => new Promise(resolve => {
+  let last = -1;
+  let still = 0;
+  const check = () => {
+    const now = window.scrollY;
+    still = now === last ? still + 1 : 0;
+    last = now;
+    if (still >= 6) setTimeout(resolve, 40);
+    else requestAnimationFrame(check);
+  };
+  requestAnimationFrame(check);
+}));
 
 async function waitFor(page, check, arg, tries = 40) {
   for (let i = 0; i < tries; i++) {
