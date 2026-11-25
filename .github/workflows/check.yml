@@ -13,8 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Asset versions and script syntax
@@ -29,6 +29,17 @@ jobs:
         run: node tools/smoke.mjs
         env:
           SHOT_DIR: screenshots
+      - name: Speed on a slow cross-border link (like opening it from mainland China)
+        if: always()
+        # Also measures the version before this change (the PR's base, or the
+        # previous commit on main), when it can be fetched.
+        env:
+          BEFORE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BEFORE" ] && git fetch --depth=1 origin "$BEFORE" && git worktree add --detach "$RUNNER_TEMP/before" "$BEFORE"; then
+            export BEFORE_DOCS="$RUNNER_TEMP/before/docs"
+          fi
+          node tools/speed.mjs
       - name: Elder-friendly layout checks (phones, large text, zoom, tablets, computers)
         if: always()
         run: node tools/ux.mjs
@@ -36,7 +47,7 @@ jobs:
           SHOT_DIR: screenshots/ux
       - name: Keep the screenshots for review
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: screenshots
           path: screenshots
@@ -49,8 +60,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Install Playwright WebKit
@@ -63,7 +74,7 @@ jobs:
           SHOT_DIR: screenshots
       - name: Keep the screenshots for review
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: webkit-screenshots
           path: screenshots

@@ -94,6 +94,31 @@ try {
     }
     await page.close();
   }
+
+  // The saved copy: after one visit the page opens again even with no connection,
+  // which means every file came from the phone rather than the network.
+  {
+    const at = 'saved copy';
+    const context = await browser.newContext({viewport: {width: 390, height: 844}});
+    const page = await context.newPage();
+    page.on('pageerror', error => errors.push(`${at} page: ${error.message}`));
+    await page.goto(url);
+    await page.locator('#preview').waitFor({state: 'visible'});
+    const ready = await page.evaluate(() => Promise.race([
+      navigator.serviceWorker.ready.then(() => true),
+      new Promise(resolve => setTimeout(() => resolve(false), 10000)),
+    ]));
+    if (!ready) errors.push(`${at}: the service worker did not start`);
+    await page.reload();
+    await page.locator('#preview').waitFor({state: 'visible'});
+    if (!(await page.evaluate(() => Boolean(navigator.serviceWorker.controller)))) errors.push(`${at}: the second visit is not using the saved copy`);
+    await context.setOffline(true);
+    await page.reload();
+    const offline = await page.locator('#preview').waitFor({state: 'visible', timeout: 10000}).then(() => true, () => false);
+    if (!offline) errors.push(`${at}: the page does not open without a connection`);
+    await context.setOffline(false);
+    await context.close();
+  }
 } finally {
   await browser.close();
   server.close();
@@ -102,4 +127,4 @@ if (errors.length) {
   console.error(errors.join('\n'));
   process.exit(1);
 }
-console.log('OK: page loads, imports a photo, frames it and downloads a JPG on desktop and two phone sizes; phone layout checks pass');
+console.log('OK: page loads, imports a photo, frames it and downloads a JPG on desktop and two phone sizes; phone layout checks pass; a second visit opens from the saved copy, also offline');
