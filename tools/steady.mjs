@@ -129,6 +129,11 @@ async function phoneChecks(viewport, label, font = 0) {
   await page.evaluate(() => document.querySelectorAll('#filters .filter')[0].click());
   await settle(page);
   const pinned = await snapshot(page);
+  const pinnedSeen = await page.evaluate(() => {
+    const card = document.querySelector('#frames button');
+    const panel = document.querySelector('.frames-panel').getBoundingClientRect().top;
+    return `bar ${document.querySelector('#bar').offsetHeight}, frames reserve ${card ? Math.round(card.getBoundingClientRect().bottom - panel) : '?'}`;
+  });
   for (const height of [viewport.height + 56, viewport.height + 112, Math.round(viewport.height * .58), viewport.height]) {
     const keyboard = height < viewport.height;
     if (keyboard) {
@@ -163,8 +168,14 @@ async function phoneChecks(viewport, label, font = 0) {
   await page.waitForTimeout(1200);
   await settle(page);
   const back = await snapshot(page);
-  const seen = await page.evaluate(() => `${window.innerWidth}x${window.innerHeight}`);
-  if (Math.abs(back.stage[1] - pinned.stage[1]) > 1) errors.push(`${at}: after turning the phone and back (window ${seen}) the preview is ${back.stage[1]}px, was ${pinned.stage[1]}px`);
+  const seen = await page.evaluate(() => {
+    const root = document.documentElement;
+    const card = document.querySelector('#frames button');
+    const panel = document.querySelector('.frames-panel').getBoundingClientRect().top;
+    return `${window.innerWidth}x${window.innerHeight}, page ${root.clientWidth}x${root.clientHeight}, zoom ${window.visualViewport ? visualViewport.scale.toFixed(2) : '?'}, ` +
+      `bar ${document.querySelector('#bar').offsetHeight}, frames reserve ${card ? Math.round(card.getBoundingClientRect().bottom - panel) : '?'}`;
+  });
+  if (Math.abs(back.stage[1] - pinned.stage[1]) > 1) errors.push(`${at}: after turning the phone and back (window ${seen}) the preview is ${back.stage[1]}px, was ${pinned.stage[1]}px (${pinnedSeen})`);
   if (!start.stage[1]) errors.push(`${at}: no preview box on first load`);
   await page.close();
 }
