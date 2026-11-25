@@ -294,9 +294,11 @@ async function readPhoto(file) {
     const height = Math.max(1, Math.round(photo.naturalHeight * scale));
     if (scale < 1 && typeof createImageBitmap === 'function') {
       try {
-        return await createImageBitmap(photo, {resizeWidth: width, resizeHeight: height, resizeQuality: 'high'});
+        return await createImageBitmap(photo, {
+          imageOrientation: 'from-image', resizeWidth: width, resizeHeight: height, resizeQuality: 'high',
+        });
       } catch {
-        // Some browsers support Canvas without bitmap resizing options.
+        // Older browsers reject these options; the Canvas copy below keeps the photo upright.
       }
     }
     // Copy into a canvas so the photo stays drawable after its URL is revoked.
