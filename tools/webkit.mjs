@@ -46,7 +46,9 @@ for (const name of profiles) {
   const page = await context.newPage();
   page.on('pageerror', error => errors.push(`${at} page error: ${error.message}`));
   page.on('console', message => message.type() === 'error' && errors.push(`${at} console: ${message.text()}`));
-  const shoot = step => shots && page.screenshot({path: join(shots, `${name.replace(/\W+/g, '-')}-${step}.png`)});
+  // caret: 'initial' stops Playwright adding a <style> to hide the cursor, which the
+  // page's Content Security Policy refuses (and WebKit logs) because style-src is 'self'.
+  const shoot = step => shots && page.screenshot({path: join(shots, `${name.replace(/\W+/g, '-')}-${step}.png`), caret: 'initial'});
   try {
     await page.goto(server.url);
     if (!(await waitFor(page, () => window.frameAppReady === true))) errors.push(`${at}: the page script did not start`);
