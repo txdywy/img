@@ -23,21 +23,28 @@ function assetsIn(html) {
   return found;
 }
 
-// Saves the page and every file it names, then drops saved files it no longer names.
+// Saves every file the page names, and only once all of them are saved replaces
+// the saved page and drops the files it no longer names. If the connection drops
+// halfway, the previous saved copy stays whole and still opens offline.
 function keep(response) {
   return response.clone().text().then(function (html) {
     var wanted = assetsIn(html);
     return caches.open(CACHE).then(function (cache) {
-      return cache.put(PAGE, response).then(function () { return cache.keys(); }).then(function (keys) {
+      return cache.keys().then(function (keys) {
         var have = {};
-        var drops = keys.filter(function (request) {
-          have[request.url] = true;
-          return request.url !== PAGE && !wanted[request.url];
-        }).map(function (request) { return cache.delete(request); });
-        var adds = Object.keys(wanted).filter(function (url) { return !have[url]; }).map(function (url) {
-          return fetch(url).then(function (file) { if (file.ok) return cache.put(url, file); }).catch(function () {});
+        keys.forEach(function (request) { have[request.url] = true; });
+        return Promise.all(Object.keys(wanted).filter(function (url) { return !have[url]; }).map(function (url) {
+          return fetch(url).then(function (file) {
+            if (!file.ok) throw new Error('Not saved: ' + url);
+            return cache.put(url, file);
+          });
+        })).then(function () {
+          return cache.put(PAGE, response);
+        }).then(function () {
+          return Promise.all(keys.filter(function (request) {
+            return request.url !== PAGE && !wanted[request.url];
+          }).map(function (request) { return cache.delete(request); }));
         });
-        return Promise.all(drops.concat(adds));
       });
     });
   });
