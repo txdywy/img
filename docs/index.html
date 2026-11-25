@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; script-src 'self' https://www.googletagmanager.com; img-src 'self' blob: https://www.googletagmanager.com https://*.google-analytics.com; connect-src 'self' https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.google.com">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; script-src 'self' https://www.googletagmanager.com https://static.cloudflareinsights.com; img-src 'self' blob: https://www.googletagmanager.com https://*.google-analytics.com; connect-src 'self' https://cloudflareinsights.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.google.com">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#fcf8f1">
   <meta name="description" content="拾光相框，免费的在线照片相框。选照片、挑相框、保存到设备，所有处理都在浏览器内完成。">
@@ -157,6 +157,7 @@
     <div class="dialog-inner">
       <h2 id="analytics-title">访问统计设置</h2>
       <p>如果你愿意，可以允许 Google Analytics 统计页面访问和功能使用次数。选入的照片和文件名始终留在你的设备上。</p>
+      <p>本站另用 Cloudflare 统计匿名访问量，不使用 Cookie，也不涉及你的照片。</p>
       <label class="analytics-choice"><input type="checkbox" id="analytics-choice"> 允许访问统计</label>
       <div class="result-actions">
         <button class="button primary" id="analytics-save" type="button">保存设置</button>
