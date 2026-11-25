@@ -1,7 +1,7 @@
-import {frames, categories, byId} from './frames.js?v=11';
-import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=11';
-import {setupAnalytics, track} from './analytics.js?v=11';
-import {openDialog} from './dialog.js?v=11';
+import {frames, categories, byId} from './frames.js?v=12';
+import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=12';
+import {setupAnalytics, track} from './analytics.js?v=12';
+import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=12';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -32,6 +32,13 @@ const exportEdge = 4096;
 const exportPixels = 16_000_000;
 const isApple = /iPhone|iPad|iPod/.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+// WeChat's own browser usually cannot download files; a long press on the picture saves it.
+const isWeChat = /MicroMessenger/i.test(navigator.userAgent);
+const coarsePointer = window.matchMedia('(pointer: coarse)');
+// The phone layout: preview pinned on top, one big button at the bottom.
+const phoneLayout = window.matchMedia('(max-width: 46rem)');
+const pinnedPhone = window.matchMedia('(max-width: 46rem) and (min-height: 34.01rem)');
+const twoColumns = window.matchMedia('(min-width: 46.01rem)');
 let exportNumber = 0;
 
 // image is full resolution for export; the smaller copies keep redraws fast.
@@ -39,7 +46,6 @@ let image = null;
 let previewSource = null;
 let thumbSource = null;
 let isUserPhoto = false;
-let sampleShown = false;
 let selected = frames[0];
 let options = {...defaults};
 const adjustmentHistory = [];
@@ -57,6 +63,8 @@ let resultUrl = '';
 let resultFile = null;
 let dragDepth = 0;
 let unsaved = false;
+let savedNote = false;
+let importProblem = '';
 let zoomed = false;
 const today = new Date();
 const captions = {
@@ -83,20 +91,36 @@ const look = (frame, base = options) => ({...base, text: captionFor(frame)});
 const pixelRatio = () => Math.min(2, Math.max(1, window.devicePixelRatio || 1));
 const clamp = value => Math.max(0, Math.min(1, value));
 
-function showStatus(message, error = false) {
+// One short sentence; the longer how-to waits behind 怎么办？
+function showStatus(message, error = false, help = '') {
   status.textContent = message;
   status.classList.toggle('error', error);
-  $('retry-photo').hidden = !error;
+  $('status-box').classList.toggle('error', error);
+  importProblem = error ? message : '';
+  $('status-help').hidden = !help;
+  $('status-help').open = false;
+  $('status-help-text').textContent = help;
+  updateBar();
+  scheduleLayout();
 }
 
-function showImportError(message) {
-  showStatus(message + (isUserPhoto ? ' 仍在使用上一张照片。' : ''), true);
+function showImportError(message, help = '') {
+  showStatus(message, true, help + (isUserPhoto ? ' 上一张照片还在，可以接着用。' : ''));
+  // Keep the message, the preview and the frames on screen together.
+  showFrames();
+}
+
+function clearImportError() {
+  if (importProblem) showStatus('');
 }
 
 function updateSave() {
   save.disabled = !isUserPhoto || reading || exporting;
   $('save-text').textContent = exporting ? '正在制作…' : '做好这张照片';
-  $('save-hint').textContent = isUserPhoto ? '先看成品，再保存' : '先选一张自己的照片';
+  const hint = $('save-hint');
+  hint.textContent = savedNote ? '✓ 已保存。还可以再换个相框，或换一张照片'
+    : isUserPhoto ? '先看成品，再保存' : '先选一张自己的照片';
+  hint.classList.toggle('saved', savedNote);
   updateBar();
 }
 
@@ -110,11 +134,13 @@ function updateBar() {
     : reading ? '正在打开…'
     : isUserPhoto ? '保存照片' : '从相册选照片';
   $('bar-icon').firstElementChild.setAttribute('href', isUserPhoto ? '#i-save' : '#i-photo');
-  const problem = $('save-status').textContent;
+  // Short enough to stay on one line, even with large text.
+  const problem = $('save-status').textContent ? '没做好，请再点一次保存' : importProblem;
   const hint = $('bar-hint');
-  hint.textContent = problem || (isUserPhoto ? '点下面的相框换样式，满意了就保存'
-    : sampleShown ? '上面是示例。先选一张自己的照片' : '先选一张自己的照片');
+  hint.textContent = problem || (savedNote ? '✓ 已保存，还可以再换相框'
+    : isUserPhoto ? '点相框换样式，满意就保存' : '先选一张自己的照片');
   hint.classList.toggle('error', Boolean(problem));
+  hint.classList.toggle('saved', !problem && savedNote);
 }
 
 function downscale(source, longest) {
@@ -155,22 +181,6 @@ function requestPreview() {
   });
 }
 
-function drawMini() {
-  const mini = $('mini-preview');
-  const ratio = preview.width / preview.height;
-  const height = Math.round(48 * pixelRatio());
-  mini.height = height;
-  mini.width = Math.max(1, Math.round(height * Math.min(ratio, 2.5)));
-  const ctx = mini.getContext('2d', {alpha: false});
-  ctx.fillStyle = '#f2e9de';
-  ctx.fillRect(0, 0, mini.width, mini.height);
-  const scale = Math.min(mini.width / preview.width, mini.height / preview.height);
-  const w = preview.width * scale;
-  const h = preview.height * scale;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(preview, (mini.width - w) / 2, (mini.height - h) / 2, w, h);
-}
-
 function drawPreview() {
   if (!image || !previewDirty) return;
   previewDirty = false;
@@ -180,10 +190,12 @@ function drawPreview() {
   preview.setAttribute('aria-label', `${isUserPhoto ? '照片' : '示例照片'}预览，${selected.name}相框`);
   $('stage-badge').textContent = (isUserPhoto ? '' : '示例 · ') + selected.name;
   preview.hidden = false;
-  viewFrame.disabled = dockView.disabled = false;
+  // Adjusting or enlarging the sample would look like editing one's own photo.
+  viewFrame.disabled = dockView.disabled = !isUserPhoto;
+  $('dock-tools').hidden = !isUserPhoto;
   $('stage-placeholder').hidden = true;
+  layoutPage();
   fitPreview();
-  drawMini();
 }
 
 function makeButton(className, text) {
@@ -194,8 +206,15 @@ function makeButton(className, text) {
   return button;
 }
 
+// Each category shows how many frames it holds, so nobody misses the ones further down.
 for (const [id, name] of categories) {
+  const count = id === 'all' ? frames.length : frames.filter(frame => frame.category === id).length;
   const button = makeButton('filter', name);
+  const number = document.createElement('span');
+  number.className = 'count';
+  number.textContent = String(count);
+  button.append(' ', number);
+  button.setAttribute('aria-label', `${name}，${count} 款`);
   button.dataset.category = id;
   button.setAttribute('aria-pressed', String(id === category));
   filters.append(button);
@@ -268,13 +287,14 @@ function drawGallery() {
   }
   grid.replaceChildren(entries);
   updateFrameSelection();
-  updatePin();
+  scheduleLayout();
 }
 
 function chooseFrame(frame) {
   if (frame === selected) return;
   selected = frame;
   markEdited();
+  clearImportError();
   updateFrameSelection();
   syncCaption();
   syncOptions();
@@ -294,16 +314,24 @@ filters.addEventListener('click', event => {
     chooseFrame(frames.find(frame => frame.category === category));
   }
   drawGallery();
+  // Show this category's frames: the first card must be in sight, not under the bar.
+  requestAnimationFrame(() => revealCard(grid.firstElementChild));
 });
+
+// Scroll just enough that a frame card sits fully between the pinned preview and the bottom bar.
+function revealCard(card) {
+  if (!card) return;
+  const rect = card.getBoundingClientRect();
+  const top = pinnedPhone.matches ? $('dock').getBoundingClientRect().bottom + 8 : 8;
+  const bottom = (phoneLayout.matches ? $('bar').getBoundingClientRect().top : window.innerHeight) - 8;
+  if (rect.bottom > bottom) window.scrollBy(0, Math.min(rect.bottom - bottom, rect.top - top));
+  else if (rect.top < top) window.scrollBy(0, rect.top - top);
+}
 
 grid.addEventListener('click', event => {
   const button = event.target.closest('button[data-frame]');
   if (!button || button.dataset.frame === selected.id) return;
-  // The words box can appear above the frames; keep the tapped card under the finger.
-  const before = button.getBoundingClientRect().top;
   chooseFrame(byId.get(button.dataset.frame));
-  const shift = button.getBoundingClientRect().top - before;
-  if (Math.abs(shift) > 1) window.scrollBy(0, shift);
 });
 
 more.addEventListener('click', () => {
@@ -378,7 +406,7 @@ async function importPhoto(file) {
   $('save-status').textContent = '';
   if (file.size > maxImportSize) {
     reading = false;
-    showImportError('这张照片太大，请重新选一张较小的照片。');
+    showImportError('这张照片太大，换一张试试。', '可以在相册里把照片另存一份小一点的，或者给照片截个屏，再选截屏。');
     updateSave();
     return;
   }
@@ -391,19 +419,23 @@ async function importPhoto(file) {
       photo.close?.();
       return;
     }
+    const first = !isUserPhoto;
     setImage(photo);
     isUserPhoto = true;
     unsaved = true;
+    savedNote = false;
     options = {...defaults};
     adjustmentHistory.length = 0;
     syncOptions();
     $('preview-label').textContent = '我的照片';
     $('pick-text').textContent = '换一张照片';
     $('file-hint').textContent = '原照片还在';
-    $('go-frames').hidden = false;
+    // On phones this message is only read out: the bar already says what to do next.
     showStatus('照片已选好。');
-    requestPreview();
+    previewDirty = true;
+    drawPreview();
     refreshGalleryPreviews();
+    if (first) showFrames();
     track('photo_selected');
   } catch (error) {
     if (version !== importVersion) return;
@@ -411,13 +443,13 @@ async function importPhoto(file) {
     // Another photo may have been chosen while the file was checked.
     if (version !== importVersion) return;
     if (error?.name === 'TooManyPixels') {
-      showImportError('这张图片的像素太多，打不开。请换一张，或先把它缩小后再选。');
+      showImportError('这张图太大，换一张试试。', '这张图片的像素太多，手机打不开。可以先把它缩小，或者截个屏，再选截屏。');
     } else if (heic) {
-      showImportError('这张是苹果手机常用的 HEIC 格式，这个浏览器打不开。可以先把它转成 JPG 再选：在相册里编辑后另存一份，或者给照片截个屏。在 iPhone 上用 Safari 打开本网站，也能直接选。');
+      showImportError('这张打不开，换一张试试。', '这张是苹果手机常用的 HEIC 格式，这个浏览器打不开。可以在相册里编辑后另存一份，或者给照片截个屏，再选。在 iPhone 上用 Safari 打开本网站，也能直接选。');
     } else if (file.type && !file.type.startsWith('image/')) {
-      showImportError('这不是照片文件。请选一张照片。');
+      showImportError('这不是照片，换一张试试。', '这里只能选照片。请从相册里选一张照片。');
     } else {
-      showImportError('这张照片打不开。可以截个屏，或另存为 JPG 后再选。');
+      showImportError('这张打不开，换一张试试。', '可以给照片截个屏，或者在相册里另存为 JPG，再选一次。');
     }
   } finally {
     if (version === importVersion) {
@@ -427,11 +459,13 @@ async function importPhoto(file) {
   }
 }
 
-$('go-frames').addEventListener('click', () => {
-  const title = $('frame-title');
-  title.focus({preventScroll: true});
-  title.scrollIntoView({block: 'start'});
-});
+// After the first photo on a phone, move the page title out of the way so the
+// frames sit right under the preview. Nothing moves if the page is already further down.
+function showFrames() {
+  if (!pinnedPhone.matches) return;
+  const top = $('editor').getBoundingClientRect().top + window.scrollY;
+  if (window.scrollY < top) window.scrollTo(0, top);
+}
 
 $('pick').addEventListener('click', () => fileInput.click());
 barPick.addEventListener('click', () => fileInput.click());
@@ -440,7 +474,6 @@ barMain.addEventListener('click', () => {
   if (isUserPhoto) void exportPhoto(barMain);
   else fileInput.click();
 });
-$('retry-photo').addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => {
   const file = fileInput.files[0];
   fileInput.value = '';
@@ -486,19 +519,19 @@ document.addEventListener('paste', event => {
   void importPhoto(file);
 });
 
-const coarsePointer = window.matchMedia('(pointer: coarse)');
-
 function syncOptions() {
   const original = options.ratio === 'original';
-  $('ratio').value = options.ratio;
-  $('fit').value = options.fit;
-  $('fit').hidden = $('fit-label').hidden = original;
+  for (const button of $('ratio-choices').children) button.setAttribute('aria-pressed', String(button.dataset.ratio === options.ratio));
+  for (const button of $('fit-choices').children) button.setAttribute('aria-pressed', String(button.dataset.fit === options.fit));
+  $('fit-area').hidden = original;
   crop = null;
   if (image && !original && options.fit === 'cover') {
     const {area} = layout(image, selected, look(selected), previewEdge);
     const difference = Math.log(photoRatio(image, options.rotation) / (area.w / area.h));
     if (Math.abs(difference) > .005) crop = {x: difference > 0, y: difference < 0};
   }
+  // Say plainly which part of the photo is cut off, so nobody loses a person without noticing.
+  $('crop-side').textContent = crop?.x ? '照片左右两边被剪掉了一些。' : '照片上下被剪掉了一些。';
   $('crop-note').hidden = !crop;
   $('crop-hold').hidden = !(crop?.y && coarsePointer.matches);
   $('position').hidden = !crop;
@@ -527,7 +560,12 @@ function applyAdjustment(next) {
 
 // Any change to the user's photo after saving it needs saving again.
 function markEdited() {
-  if (isUserPhoto) unsaved = true;
+  if (!isUserPhoto) return;
+  unsaved = true;
+  if (savedNote) {
+    savedNote = false;
+    updateSave();
+  }
 }
 
 function redrawAdjustment() {
@@ -537,8 +575,14 @@ function redrawAdjustment() {
   refreshGalleryPreviews();
 }
 
-$('ratio').addEventListener('change', event => applyAdjustment({ratio: event.target.value}));
-$('fit').addEventListener('change', event => applyAdjustment({fit: event.target.value}));
+$('ratio-choices').addEventListener('click', event => {
+  const button = event.target.closest('button[data-ratio]');
+  if (button) applyAdjustment({ratio: button.dataset.ratio});
+});
+$('fit-choices').addEventListener('click', event => {
+  const button = event.target.closest('button[data-fit]');
+  if (button) applyAdjustment({fit: button.dataset.fit});
+});
 $('position').addEventListener('click', event => {
   const button = event.target.closest('button[data-axis]');
   if (!button || button.getAttribute('aria-disabled') === 'true') return;
@@ -548,10 +592,39 @@ $('position').addEventListener('click', event => {
 });
 $('rotate').addEventListener('click', () => applyAdjustment({rotation: (options.rotation + 90) % 360}));
 $('reset').addEventListener('click', () => applyAdjustment(defaults));
-$('adjust').addEventListener('toggle', () => $('dock').classList.toggle('sheet-open', $('adjust').open));
-$('adjust-done').addEventListener('click', () => {
-  $('adjust').open = false;
-  $('adjust').querySelector('summary').focus({preventScroll: true});
+
+// On phones 调整 and 改字 open as sheets over the lower half of the screen.
+// A tap outside, Esc, the Back button or the button at the bottom closes them.
+const sheets = [$('adjust'), $('words')];
+
+function closeSheet(sheet, focus = true) {
+  if (!sheet.open) return;
+  sheet.open = false;
+  if (focus) sheet.querySelector('summary').focus({preventScroll: true});
+}
+
+for (const sheet of sheets) {
+  sheet.addEventListener('toggle', () => {
+    if (sheet.open) {
+      for (const other of sheets) if (other !== sheet) closeSheet(other, false);
+      sheet.layer = pushLayer(() => closeSheet(sheet));
+    } else {
+      releaseLayer(sheet.layer);
+      sheet.layer = null;
+    }
+    const open = sheets.some(item => item.open);
+    $('dock').classList.toggle('sheet-open', open);
+    $('sheet-backdrop').hidden = !open;
+  });
+  sheet.querySelector('[data-close-sheet]').addEventListener('click', () => closeSheet(sheet));
+}
+$('sheet-backdrop').addEventListener('click', () => sheets.forEach(sheet => closeSheet(sheet)));
+document.addEventListener('keydown', event => {
+  const open = sheets.find(sheet => sheet.open);
+  if (event.key === 'Escape' && open && !document.querySelector('dialog[open]')) {
+    event.preventDefault();
+    closeSheet(open);
+  }
 });
 $('undo').addEventListener('click', () => {
   options = adjustmentHistory.pop();
@@ -646,6 +719,15 @@ function nextPaint() {
   return new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve)));
 }
 
+function dataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
 function encode(canvas) {
   return new Promise((resolve, reject) => {
     canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Empty output')), 'image/jpeg', .94);
@@ -672,23 +754,42 @@ function exportName(frame) {
 function showResult(opener) {
   const canShare = Boolean(resultFile && navigator.canShare?.({files: [resultFile]}));
   // On iPhone and iPad, the share sheet is the direct way into Photos.
-  const shareFirst = canShare && isApple;
+  const shareFirst = canShare && isApple && !isWeChat;
   share.hidden = !canShare;
   share.className = `button ${shareFirst ? 'primary' : 'secondary'}`;
-  download.className = `button ${shareFirst ? 'secondary' : 'primary'}`;
+  download.className = `button ${shareFirst || isWeChat ? 'secondary' : 'primary'}`;
   $('share-text').textContent = shareFirst ? '保存到相册' : '发给家人或其他应用';
   $('download-text').textContent = shareFirst ? '下载到文件' : '下载照片';
-  $('result-lead').textContent = shareFirst
-    ? '成品做好了。点「保存到相册」，在弹出的菜单里选「存储图像」。'
+  const lead = $('result-lead');
+  lead.classList.remove('saved');
+  lead.textContent = isWeChat
+    ? '在微信里：用手指按住上面的照片不放，选「保存图片」，就存进相册了。'
+    : shareFirst ? '成品做好了。点「保存到相册」，在弹出的菜单里选「存储图像」。'
     : '成品做好了。点「下载照片」，存到这台设备。';
   download.after(share);
   if (shareFirst) download.before(share);
   openDialog(resultDialog, opener);
 }
 
+// Saved: say so in the window and keep saying it on the page after it closes.
+function markSaved(message) {
+  unsaved = false;
+  savedNote = true;
+  const lead = $('result-lead');
+  lead.textContent = message;
+  lead.classList.add('saved');
+  updateSave();
+}
+
 save.addEventListener('click', () => {
   if (!save.disabled) void exportPhoto(save);
 });
+
+// On Android phones the photo downloads straight away, so 保存照片 is one tap.
+// The window then only says where to find it. iPhone, iPad and WeChat need a tap of their own.
+function savesDirectly() {
+  return coarsePointer.matches && phoneLayout.matches && !isApple && !isWeChat;
+}
 
 async function exportPhoto(opener) {
   if (!isUserPhoto || reading || exporting || !image) return;
@@ -709,13 +810,16 @@ async function exportPhoto(opener) {
     if (version !== importVersion) return;
     clearResult();
     resultUrl = URL.createObjectURL(blob);
-    $('result-image').src = resultUrl;
+    // WeChat's long-press menu cannot save a blob: picture, so give it the image data itself.
+    $('result-image').src = isWeChat ? await dataUrl(blob) : resultUrl;
+    if (version !== importVersion) return;
     download.href = resultUrl;
     const filename = exportName(frame);
     download.download = filename;
     if (typeof File === 'function') resultFile = new File([blob], filename, {type: blob.type});
     showResult(opener);
     track('photo_exported');
+    if (opener === barMain && savesDirectly()) download.click();
   } catch {
     if (version === importVersion) $('save-status').textContent = '这次没做好。可以再点一次保存试试，或换一张较小的照片。';
   } finally {
@@ -727,10 +831,11 @@ async function exportPhoto(opener) {
 }
 
 download.addEventListener('click', () => {
-  unsaved = false;
   $('share-status').textContent = '';
-  $('result-lead').textContent = `已开始下载。请到浏览器的「下载」列表找「${download.download}」${isApple ? '，或在「文件」App 的「下载项」里找' : ''}。`;
-  $('download-text').textContent = '再次下载';
+  markSaved(isApple
+    ? `✓ 已存好。在「文件」App 的「下载项」里，名字是「${download.download}」。`
+    : `✓ 已存到这台设备的「下载」里，名字是「${download.download}」。手机相册里一般也能看到。`);
+  $('download-text').textContent = '再存一次';
   track('photo_download_clicked');
 });
 
@@ -738,9 +843,12 @@ share.addEventListener('click', async () => {
   const message = $('share-status');
   try {
     await navigator.share({files: [resultFile]});
-    unsaved = false;
     message.textContent = '';
-    if (isApple) $('result-lead').textContent = '好了。如果选了「存储图像」，照片就在相册里。';
+    if (isApple) markSaved('✓ 好了。如果选了「存储图像」，照片就在相册里。');
+    else {
+      unsaved = false;
+      updateSave();
+    }
     track('photo_share_completed');
   } catch (error) {
     if (error.name === 'AbortError') return;
@@ -811,8 +919,11 @@ for (const [id, direction] of [['zoom-prev', -1], ['zoom-next', 1]]) {
 // Words on frames that carry a caption.
 function syncCaption() {
   const kind = selected.caption;
-  $('caption').hidden = !kind;
-  if (!kind) return;
+  $('words').hidden = !kind;
+  if (!kind) {
+    closeSheet($('words'), false);
+    return;
+  }
   const state = captions[kind];
   const labels = captionLabels[kind];
   $('caption-on').checked = state.on;
@@ -823,6 +934,7 @@ function syncCaption() {
   $('caption-date').value = state.date || '';
   $('caption-date-row').hidden = kind !== 'travel';
   $('caption-fields').hidden = !state.on;
+  $('words-summary').textContent = kind === 'travel' ? '写地点和日期' : '改相框上的祝福语';
 }
 
 function captionChanged() {
@@ -846,29 +958,65 @@ $('caption-date').addEventListener('input', event => {
   captionChanged();
 });
 
-// Pin the frame actions on narrow screens only while they leave room for a whole frame card.
-const saveArea = document.querySelector('.save-area');
+// Phones: the preview shrinks to leave room under it for the categories and a whole
+// row of frame cards above the bottom bar, also on small screens and with large text.
+// Wider screens: the photo column stays in view beside the frames when it fits.
+let layoutFrame = 0;
 const framesPanel = document.querySelector('.frames-panel');
-const singleColumn = window.matchMedia('(max-width: 72rem)');
+const photoPanel = document.querySelector('.photo-panel');
 
-function updatePin() {
-  const bar = saveArea.offsetHeight;
-  const card = grid.firstElementChild?.offsetHeight || 0;
-  // On phones the bar is hidden: saving lives in the bottom bar instead.
-  const pin = singleColumn.matches && bar > 0 && bar <= window.innerHeight * .35 && bar + card + 32 <= window.innerHeight;
-  framesPanel.classList.toggle('pin-actions', pin);
-  framesPanel.style.setProperty('--frame-scroll-margin', pin ? `${bar + 12}px` : '0px');
+function scheduleLayout() {
+  if (layoutFrame) return;
+  layoutFrame = requestAnimationFrame(() => {
+    layoutFrame = 0;
+    layoutPage();
+  });
 }
 
-// Keep keyboard focus clear of the pinned bar, also when moving backwards.
-framesPanel.addEventListener('focusin', event => {
-  if (!framesPanel.classList.contains('pin-actions') || saveArea.contains(event.target)) return;
-  const covered = saveArea.getBoundingClientRect().bottom + 8 - event.target.getBoundingClientRect().top;
-  if (covered > 0 && saveArea.getBoundingClientRect().top <= 1) window.scrollBy(0, -covered);
-});
-window.addEventListener('resize', updatePin);
-singleColumn.addEventListener?.('change', updatePin);
-if ('ResizeObserver' in window) new ResizeObserver(updatePin).observe(saveArea);
+function layoutPage() {
+  const root = document.documentElement;
+  const rem = parseFloat(getComputedStyle(root).fontSize) || 16;
+  const bar = $('bar');
+  root.style.setProperty('--bar-h', `${phoneLayout.matches ? bar.offsetHeight : 0}px`);
+  const shape = image ? preview.width / preview.height : 1.38;
+  if (!pinnedPhone.matches) {
+    stage.style.height = '';
+    if (phoneLayout.matches) {
+      // Short or zoomed phones: the box is never taller than the photo needs.
+      const style = getComputedStyle(stage);
+      const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+      const natural = (stage.clientWidth - padX) / shape + padY;
+      if (natural < stage.offsetHeight) stage.style.height = `${Math.round(Math.max(7 * rem, natural))}px`;
+    }
+  } else {
+    const dock = $('dock');
+    const style = getComputedStyle(stage);
+    const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const card = grid.firstElementChild;
+    const panelTop = framesPanel.getBoundingClientRect().top;
+    const reserve = card ? card.getBoundingClientRect().bottom - panelTop : 15 * rem;
+    const chrome = dock.offsetHeight - stage.offsetHeight;
+    const room = window.innerHeight - bar.offsetHeight - chrome - reserve - .5 * rem;
+    // Panoramas and long screenshots get a shorter box instead of empty space.
+    const natural = (stage.clientWidth - padX) / shape + padY;
+    const height = Math.max(7 * rem, Math.min(room, natural, window.innerHeight * .5));
+    stage.style.height = `${Math.round(height)}px`;
+    root.style.setProperty('--dock-h', `${dock.offsetHeight}px`);
+  }
+  // Keep the photo beside the frames on tablets and computers, if the whole column fits.
+  const fits = twoColumns.matches && photoPanel.offsetHeight + 24 <= window.innerHeight;
+  photoPanel.classList.toggle('stick', fits);
+}
+
+window.addEventListener('resize', scheduleLayout);
+for (const query of [phoneLayout, pinnedPhone, twoColumns]) query.addEventListener?.('change', scheduleLayout);
+if ('ResizeObserver' in window) {
+  const watch = new ResizeObserver(scheduleLayout);
+  for (const element of [$('bar'), $('dock'), filters, photoPanel]) watch.observe(element);
+}
+document.fonts?.ready.then(scheduleLayout);
 
 // The brand link only scrolls to the top, and leaving with unsaved work asks first.
 window.addEventListener('beforeunload', event => {
@@ -883,12 +1031,13 @@ if ('ResizeObserver' in window) new ResizeObserver(fitPreview).observe(stage);
 else window.addEventListener('resize', fitPreview);
 drawGallery();
 updateBar();
+syncCaption();
+layoutPage();
 preview.hidden = true;
 $('stage-placeholder').hidden = false;
 loadImage(new URL('./example.webp', import.meta.url).href).then(sample => {
   if (isUserPhoto) return;
   setImage(sample);
-  sampleShown = true;
   updateBar();
   syncOptions();
   refreshGalleryPreviews();
