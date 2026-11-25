@@ -1,7 +1,7 @@
-import {frames, categories, byId} from './frames.js?v=10';
-import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=10';
-import {setupAnalytics, track} from './analytics.js?v=10';
-import {openDialog} from './dialog.js?v=10';
+import {frames, categories, byId} from './frames.js?v=11';
+import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=11';
+import {setupAnalytics, track} from './analytics.js?v=11';
+import {openDialog} from './dialog.js?v=11';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -16,6 +16,9 @@ const resultDialog = $('result-dialog');
 const download = $('result-download');
 const share = $('share');
 const viewFrame = $('view-frame');
+const dockView = $('dock-view');
+const barMain = $('bar-main');
+const barPick = $('bar-pick');
 const defaults = {ratio: 'original', fit: 'contain', rotation: 0, x: .5, y: .5};
 const tileWidth = 184;
 const tileHeight = 116;
@@ -36,6 +39,7 @@ let image = null;
 let previewSource = null;
 let thumbSource = null;
 let isUserPhoto = false;
+let sampleShown = false;
 let selected = frames[0];
 let options = {...defaults};
 const adjustmentHistory = [];
@@ -93,6 +97,24 @@ function updateSave() {
   save.disabled = !isUserPhoto || reading || exporting;
   $('save-text').textContent = exporting ? '正在制作…' : '做好这张照片';
   $('save-hint').textContent = isUserPhoto ? '先看成品，再保存' : '先选一张自己的照片';
+  updateBar();
+}
+
+// Phones get one bar at the bottom with the one thing to do next:
+// choose a photo first, then save it. Changing the photo stays beside it.
+function updateBar() {
+  barMain.disabled = reading || exporting;
+  barPick.hidden = !isUserPhoto;
+  barPick.disabled = reading || exporting;
+  $('bar-main-text').textContent = exporting ? '正在制作…'
+    : reading ? '正在打开…'
+    : isUserPhoto ? '保存照片' : '从相册选照片';
+  $('bar-icon').firstElementChild.setAttribute('href', isUserPhoto ? '#i-save' : '#i-photo');
+  const problem = $('save-status').textContent;
+  const hint = $('bar-hint');
+  hint.textContent = problem || (isUserPhoto ? '点下面的相框换样式，满意了就保存'
+    : sampleShown ? '上面是示例。先选一张自己的照片' : '先选一张自己的照片');
+  hint.classList.toggle('error', Boolean(problem));
 }
 
 function downscale(source, longest) {
@@ -156,8 +178,9 @@ function drawPreview() {
   previewLayout = layout(image, selected, settings, previewEdge);
   paint(preview, previewSource, selected, settings, previewLayout);
   preview.setAttribute('aria-label', `${isUserPhoto ? '照片' : '示例照片'}预览，${selected.name}相框`);
+  $('stage-badge').textContent = (isUserPhoto ? '' : '示例 · ') + selected.name;
   preview.hidden = false;
-  viewFrame.disabled = false;
+  viewFrame.disabled = dockView.disabled = false;
   $('stage-placeholder').hidden = true;
   fitPreview();
   drawMini();
@@ -223,7 +246,7 @@ function drawGallery() {
   $('frame-count').textContent = `${items.length} 款相框`;
   more.hidden = items.length <= listSize;
   more.setAttribute('aria-expanded', String(expanded));
-  more.firstChild.textContent = expanded ? '收起相框 ' : '查看更多相框 ';
+  more.firstChild.textContent = expanded ? '收起相框 ' : `查看更多相框（还有 ${items.length - shown.length} 款） `;
   const entries = document.createDocumentFragment();
   for (const frame of shown) {
     const button = makeButton('frame', '');
@@ -248,25 +271,39 @@ function drawGallery() {
   updatePin();
 }
 
-filters.addEventListener('click', event => {
-  const button = event.target.closest('button[data-category]');
-  if (!button || category === button.dataset.category) return;
-  category = button.dataset.category;
-  expanded = false;
-  for (const filter of filters.children) filter.setAttribute('aria-pressed', String(filter === button));
-  drawGallery();
-});
-
-grid.addEventListener('click', event => {
-  const button = event.target.closest('button[data-frame]');
-  if (!button || button.dataset.frame === selected.id) return;
-  selected = byId.get(button.dataset.frame);
+function chooseFrame(frame) {
+  if (frame === selected) return;
+  selected = frame;
   markEdited();
   updateFrameSelection();
   syncCaption();
   syncOptions();
   requestPreview();
   track('frame_selected');
+}
+
+// A category is a quick way to try a style: tapping one puts its first frame
+// on the photo straight away, unless the current frame already belongs to it.
+filters.addEventListener('click', event => {
+  const button = event.target.closest('button[data-category]');
+  if (!button || category === button.dataset.category) return;
+  category = button.dataset.category;
+  expanded = false;
+  for (const filter of filters.children) filter.setAttribute('aria-pressed', String(filter === button));
+  if (category !== 'all' && selected.category !== category) {
+    chooseFrame(frames.find(frame => frame.category === category));
+  }
+  drawGallery();
+});
+
+grid.addEventListener('click', event => {
+  const button = event.target.closest('button[data-frame]');
+  if (!button || button.dataset.frame === selected.id) return;
+  // The words box can appear above the frames; keep the tapped card under the finger.
+  const before = button.getBoundingClientRect().top;
+  chooseFrame(byId.get(button.dataset.frame));
+  const shift = button.getBoundingClientRect().top - before;
+  if (Math.abs(shift) > 1) window.scrollBy(0, shift);
 });
 
 more.addEventListener('click', () => {
@@ -397,6 +434,12 @@ $('go-frames').addEventListener('click', () => {
 });
 
 $('pick').addEventListener('click', () => fileInput.click());
+barPick.addEventListener('click', () => fileInput.click());
+barMain.addEventListener('click', () => {
+  if (barMain.disabled) return;
+  if (isUserPhoto) void exportPhoto(barMain);
+  else fileInput.click();
+});
 $('retry-photo').addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => {
   const file = fileInput.files[0];
@@ -505,6 +548,11 @@ $('position').addEventListener('click', event => {
 });
 $('rotate').addEventListener('click', () => applyAdjustment({rotation: (options.rotation + 90) % 360}));
 $('reset').addEventListener('click', () => applyAdjustment(defaults));
+$('adjust').addEventListener('toggle', () => $('dock').classList.toggle('sheet-open', $('adjust').open));
+$('adjust-done').addEventListener('click', () => {
+  $('adjust').open = false;
+  $('adjust').querySelector('summary').focus({preventScroll: true});
+});
 $('undo').addEventListener('click', () => {
   options = adjustmentHistory.pop();
   redrawAdjustment();
@@ -621,7 +669,7 @@ function exportName(frame) {
   return `拾光相框-${frame.name}-${date}-${++exportNumber}.jpg`;
 }
 
-function showResult() {
+function showResult(opener) {
   const canShare = Boolean(resultFile && navigator.canShare?.({files: [resultFile]}));
   // On iPhone and iPad, the share sheet is the direct way into Photos.
   const shareFirst = canShare && isApple;
@@ -635,11 +683,15 @@ function showResult() {
     : '成品做好了。点「下载照片」，存到这台设备。';
   download.after(share);
   if (shareFirst) download.before(share);
-  openDialog(resultDialog, save);
+  openDialog(resultDialog, opener);
 }
 
-save.addEventListener('click', async () => {
-  if (save.disabled || !image) return;
+save.addEventListener('click', () => {
+  if (!save.disabled) void exportPhoto(save);
+});
+
+async function exportPhoto(opener) {
+  if (!isUserPhoto || reading || exporting || !image) return;
   exporting = true;
   $('save-status').textContent = '';
   updateSave();
@@ -662,17 +714,17 @@ save.addEventListener('click', async () => {
     const filename = exportName(frame);
     download.download = filename;
     if (typeof File === 'function') resultFile = new File([blob], filename, {type: blob.type});
-    showResult();
+    showResult(opener);
     track('photo_exported');
   } catch {
-    if (version === importVersion) $('save-status').textContent = '这次没做好。可以点上方按钮再试一次，或换一张较小的照片。';
+    if (version === importVersion) $('save-status').textContent = '这次没做好。可以再点一次保存试试，或换一张较小的照片。';
   } finally {
     canvas.width = 1;
     canvas.height = 1;
     exporting = false;
     updateSave();
   }
-});
+}
 
 download.addEventListener('click', () => {
   unsaved = false;
@@ -696,7 +748,10 @@ share.addEventListener('click', async () => {
   }
 });
 
-viewFrame.addEventListener('click', () => {
+viewFrame.addEventListener('click', () => openFrameView(viewFrame));
+dockView.addEventListener('click', () => openFrameView(dockView));
+
+function openFrameView(opener) {
   if (!image) return;
   const view = drawFramePreview(false);
   const long = Math.max(view.width / view.height, view.height / view.width);
@@ -711,8 +766,8 @@ viewFrame.addEventListener('click', () => {
     corner.width = corner.height = 180;
     corner.getContext('2d').drawImage(swatch, 0, 0, 180, 180, 0, 0, 180, 180);
   }
-  openDialog($('frame-dialog'), viewFrame);
-});
+  openDialog($('frame-dialog'), opener);
+}
 
 // Long panoramas and tall photos: draw a sharper copy and let people scroll along it.
 function drawFramePreview(zoom) {
@@ -799,7 +854,8 @@ const singleColumn = window.matchMedia('(max-width: 72rem)');
 function updatePin() {
   const bar = saveArea.offsetHeight;
   const card = grid.firstElementChild?.offsetHeight || 0;
-  const pin = singleColumn.matches && bar <= window.innerHeight * .35 && bar + card + 32 <= window.innerHeight;
+  // On phones the bar is hidden: saving lives in the bottom bar instead.
+  const pin = singleColumn.matches && bar > 0 && bar <= window.innerHeight * .35 && bar + card + 32 <= window.innerHeight;
   framesPanel.classList.toggle('pin-actions', pin);
   framesPanel.style.setProperty('--frame-scroll-margin', pin ? `${bar + 12}px` : '0px');
 }
@@ -826,11 +882,14 @@ $('help-open').addEventListener('click', event => openDialog($('help-dialog'), e
 if ('ResizeObserver' in window) new ResizeObserver(fitPreview).observe(stage);
 else window.addEventListener('resize', fitPreview);
 drawGallery();
+updateBar();
 preview.hidden = true;
 $('stage-placeholder').hidden = false;
 loadImage(new URL('./example.webp', import.meta.url).href).then(sample => {
   if (isUserPhoto) return;
   setImage(sample);
+  sampleShown = true;
+  updateBar();
   syncOptions();
   refreshGalleryPreviews();
   requestPreview();

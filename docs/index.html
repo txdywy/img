@@ -14,9 +14,9 @@
   <meta property="og:description" content="39 款免费相框，选照片、挑相框、保存。照片留在自己的设备上。">
   <meta property="og:url" content="https://img.hackx64.eu.org/">
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./assets/style.css?v=10">
+  <link rel="stylesheet" href="./assets/style.css?v=11">
   <link rel="preload" as="image" href="./assets/example.webp" type="image/webp">
-  <script type="module" src="./assets/app.js?v=10"></script>
+  <script type="module" src="./assets/app.js?v=11"></script>
 </head>
 <body>
   <svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -59,54 +59,60 @@
           <span class="file-hint" id="file-hint">免费，会另存一张，原照片还在</span>
           <button class="button secondary go-frames" type="button" id="go-frames" hidden>去挑相框</button>
         </div>
-        <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
-        <button type="button" class="button secondary retry-photo" id="retry-photo" hidden>重新选照片</button>
-        <div class="stage" id="stage">
-          <canvas id="preview" width="640" height="480" role="img" aria-label="照片加相框预览"></canvas>
-          <span class="stage-placeholder" id="stage-placeholder" hidden>选一张照片，就能在这里看到套框效果</span>
-        </div>
-        <div class="photo-controls">
-          <details class="adjust" id="adjust">
-            <summary><svg class="icon"><use href="#i-adjust"/></svg> 调整照片 <span class="chevron" aria-hidden="true"></span></summary>
-            <div class="adjust-body">
-              <label for="ratio">成品比例</label>
-              <select id="ratio">
-                <option value="original">跟随原图比例</option>
-                <option value="1">正方形 1∶1</option>
-                <option value="0.75">竖图 3∶4</option>
-                <option value="0.5625">竖屏 9∶16</option>
-                <option value="1.3333333333333333">横图 4∶3</option>
-                <option value="1.7777777777777777">宽屏 16∶9</option>
-              </select>
-              <label for="fit" id="fit-label">照片放置</label>
-              <select id="fit">
-                <option value="contain">显示整张照片</option>
-                <option value="cover">铺满相框</option>
-              </select>
-              <p class="crop-note" id="crop-note" hidden>铺满相框会剪掉照片的一部分。可以在预览图上拖动照片<span id="crop-hold" hidden>（手机上先用手指按住照片片刻，再上下拖动）</span>，或用下面的按钮调整位置。</p>
-              <div class="position" id="position" role="group" hidden aria-label="微调照片的位置">
-                <div class="adjust-actions" id="position-x">
-                  <button type="button" class="button secondary" data-axis="x" data-step="10">向左移</button>
-                  <button type="button" class="button secondary" data-axis="x" data-step="-10">向右移</button>
+        <div class="dock" id="dock">
+          <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
+          <button type="button" class="button secondary retry-photo" id="retry-photo" hidden>重新选照片</button>
+          <div class="stage" id="stage">
+            <canvas id="preview" width="640" height="480" role="img" aria-label="照片加相框预览"></canvas>
+            <span class="stage-placeholder" id="stage-placeholder" hidden>选一张照片，就能在这里看到套框效果</span>
+            <span class="stage-badge" id="stage-badge" aria-hidden="true"></span>
+          </div>
+          <div class="dock-tools">
+            <details class="adjust" id="adjust">
+              <summary><svg class="icon"><use href="#i-adjust"/></svg> 调整照片 <span class="chevron" aria-hidden="true"></span></summary>
+              <div class="adjust-body">
+                <p class="sheet-title">调整照片 <span>（不调也可以）</span></p>
+                <label for="ratio">成品比例</label>
+                <select id="ratio">
+                  <option value="original">跟随原图比例</option>
+                  <option value="1">正方形 1∶1</option>
+                  <option value="0.75">竖图 3∶4</option>
+                  <option value="0.5625">竖屏 9∶16</option>
+                  <option value="1.3333333333333333">横图 4∶3</option>
+                  <option value="1.7777777777777777">宽屏 16∶9</option>
+                </select>
+                <label for="fit" id="fit-label">照片放置</label>
+                <select id="fit">
+                  <option value="contain">显示整张照片</option>
+                  <option value="cover">铺满相框</option>
+                </select>
+                <p class="crop-note" id="crop-note" hidden>铺满相框会剪掉照片的一部分。可以在预览图上拖动照片<span id="crop-hold" hidden>（手机上先用手指按住照片片刻，再上下拖动）</span>，或用下面的按钮调整位置。</p>
+                <div class="position" id="position" role="group" hidden aria-label="微调照片的位置">
+                  <div class="adjust-actions" id="position-x">
+                    <button type="button" class="button secondary" data-axis="x" data-step="10">向左移</button>
+                    <button type="button" class="button secondary" data-axis="x" data-step="-10">向右移</button>
+                  </div>
+                  <div class="adjust-actions" id="position-y">
+                    <button type="button" class="button secondary" data-axis="y" data-step="10">向上移</button>
+                    <button type="button" class="button secondary" data-axis="y" data-step="-10">向下移</button>
+                  </div>
                 </div>
-                <div class="adjust-actions" id="position-y">
-                  <button type="button" class="button secondary" data-axis="y" data-step="10">向上移</button>
-                  <button type="button" class="button secondary" data-axis="y" data-step="-10">向下移</button>
+                <div class="adjust-actions">
+                  <button type="button" class="button secondary" id="rotate">顺时针旋转</button>
+                  <button type="button" class="button secondary" id="undo" disabled>撤销上一步</button>
+                  <button type="button" class="button secondary" id="reset">恢复默认</button>
                 </div>
+                <button type="button" class="button primary adjust-done" id="adjust-done">调好了</button>
               </div>
-              <div class="adjust-actions">
-                <button type="button" class="button secondary" id="rotate">顺时针旋转</button>
-                <button type="button" class="button secondary" id="undo" disabled>撤销上一步</button>
-                <button type="button" class="button secondary" id="reset">恢复默认</button>
-              </div>
-            </div>
-          </details>
+            </details>
+            <button class="button secondary dock-view" type="button" id="dock-view" disabled>看大图</button>
+          </div>
         </div>
       </section>
 
       <section class="panel frames-panel" aria-labelledby="frame-title">
         <header class="panel-head">
-          <h2 id="frame-title" tabindex="-1"><span class="step">2</span> 挑个相框</h2>
+          <h2 id="frame-title" tabindex="-1"><span class="step">2</span> <span class="wide-only">挑个相框</span><span class="phone-only">点一下，换相框</span></h2>
           <span class="frame-count" id="frame-count"></span>
         </header>
         <div class="filters" id="filters" role="group" aria-label="相框分类"></div>
@@ -135,6 +141,13 @@
         <button class="more" type="button" id="more" aria-controls="frames" aria-expanded="false" hidden>查看更多相框 <span class="chevron" aria-hidden="true"></span></button>
       </section>
     </section>
+    <div class="bar" id="bar" role="group" aria-label="选照片和保存">
+      <p class="bar-hint" id="bar-hint"></p>
+      <div class="bar-actions">
+        <button class="button secondary" type="button" id="bar-pick" hidden>换照片</button>
+        <button class="button primary" type="button" id="bar-main"><svg class="icon" id="bar-icon"><use href="#i-photo"/></svg> <span id="bar-main-text">从相册选照片</span></button>
+      </div>
+    </div>
     <noscript><p class="status error">请在浏览器中开启 JavaScript，再使用相框工具。</p></noscript>
   </main>
 
@@ -145,8 +158,8 @@
       <h2 id="help-title">怎样给照片加相框？</h2>
       <ol>
         <li>先从相册或文件里选一张自己的照片。电脑上也可以把照片拖进页面，或复制后按 Ctrl+V 粘贴。</li>
-        <li>点喜欢的相框。默认保留整张照片和原图比例，长图也能套框。展开「调整照片」可以改比例或旋转，铺满相框时可在预览图上拖动照片。</li>
-        <li>点「做好这张照片」，再在成品窗口保存。iPhone 和 iPad 上点「保存到相册」，其他设备点「下载照片」。</li>
+        <li>点喜欢的相框，上面的预览马上换好。默认保留整张照片和原图比例，长图也能套框。想改比例或旋转，点「调整照片」；不调也可以。</li>
+        <li>点「保存照片」（电脑上是「做好这张照片」），再在成品窗口保存。iPhone 和 iPad 上点「保存到相册」，其他设备点「下载照片」。</li>
       </ol>
       <p>照片处理都在这台设备上完成。遇到打不开的照片，可以在相册里另存为 JPG 或 PNG，再选一次。</p>
       <form method="dialog"><button class="button primary">我知道了</button></form>

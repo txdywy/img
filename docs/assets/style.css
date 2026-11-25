@@ -80,12 +80,12 @@ h2 { font-size: 1.32rem; line-height: 1.4; font-weight: 750; }
 .file-hint { font-size: .94rem; color: var(--soft); overflow-wrap: anywhere; }
 .status { margin-top: .7rem; font-size: 1.125rem; color: #265d45; overflow-wrap: anywhere; }
 .status.error { color: #8d2839; }
-.photo-panel > .status { margin: 0 0 .75rem; }
+.dock > .status { margin: 0 0 .75rem; }
 .retry-photo { margin-bottom: .75rem; }
-.phone-pick { display: none; }
+.phone-pick, .phone-only, .bar, .stage-badge, .dock-view, .sheet-title, .adjust-done { display: none; }
 .stage {
   display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; min-width: 0;
-  aspect-ratio: 1.38; overflow: hidden; border: 1px solid #e9dece; border-radius: .8rem; padding: 1.85rem;
+  position: relative; aspect-ratio: 1.38; overflow: hidden; border: 1px solid #e9dece; border-radius: .8rem; padding: 1.85rem;
   background-color: var(--stage);
   background-image: radial-gradient(ellipse at 50% 24%, #f9f3e9, transparent 75%), radial-gradient(#9c80691e 0.7px, transparent 1px);
   background-size: 100% 100%, 8px 8px;
@@ -251,6 +251,85 @@ dialog::backdrop { background: #32231995; }
 }
 @media (max-width: 23rem) {
   h1 { font-size: 2.3rem; }
+}
+/* Phones: the preview stays pinned at the top while the frames scroll under it,
+   and the one next step (choose a photo, then save) sits in a bar at the bottom,
+   where the thumb is. Nothing on the way needs a gesture: every step is a tap. */
+@media (max-width: 46rem) {
+  body { padding-bottom: calc(7.5rem + env(safe-area-inset-bottom)); font-size: 1.0625rem; }
+  .intro { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); padding: 0; }
+  .workspace { display: block; padding-top: .5rem; }
+  .frames-panel { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .photo-panel > .panel-head, .photo-actions, .save-area, .go-frames, .wide-only { display: none; }
+  /* The pinned preview needs the whole tool as its scroll area, not just the photo card. */
+  .photo-panel { display: contents; }
+  .phone-only { display: inline; }
+  #frame-title .step { display: none; }
+
+  .dock {
+    position: sticky; top: 0; z-index: 2; margin-inline: -.75rem; padding: .5rem .75rem .65rem;
+    background: var(--paper); border-bottom: 1px solid var(--line); box-shadow: 0 8px 14px -10px #51362d40;
+  }
+  .dock > .status { margin: 0 0 .4rem; font-size: 1rem; }
+  .stage { aspect-ratio: auto; height: clamp(12rem, 40vh, 26rem); padding: .75rem; }
+  .stage-badge {
+    display: block; position: absolute; top: .45rem; left: .45rem; max-width: calc(100% - .9rem);
+    padding: .1rem .55rem; border-radius: .4rem; background: #fffcf7e8; color: var(--ink);
+    font-size: .95rem; font-weight: 700; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .stage-badge:empty { display: none; }
+  .stage-placeholder { padding: 1rem; font-size: 1.125rem; }
+  .dock-tools { display: flex; gap: .5rem; margin-top: .5rem; }
+  .dock-tools > * { flex: 1 1 0; min-width: 0; }
+  .dock-view { display: inline-flex; }
+  .adjust { margin: 0; border: 0; }
+  .adjust summary {
+    width: 100%; justify-content: center; padding: .5rem .75rem; color: var(--rose); font-weight: 700; font-size: 1.125rem;
+    background: var(--panel); border: 1px solid var(--line); border-radius: .63rem;
+  }
+  .adjust summary .chevron { display: none; }
+  .adjust[open] summary { background: var(--rose-light); border-color: #ddaeb4; }
+  /* The adjustments open as a sheet over the lower half, so the preview stays in sight. */
+  .adjust[open] .adjust-body {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; max-height: 52vh; overflow-y: auto; overscroll-behavior: contain;
+    padding: 1rem .9rem calc(1rem + env(safe-area-inset-bottom)); background: var(--panel);
+    border-top: 1px solid var(--line); border-radius: 1.1rem 1.1rem 0 0; box-shadow: 0 -10px 34px #33292340;
+  }
+  /* The pinned preview is its own layer; lift it while its sheet is open so the sheet covers the bottom bar. */
+  .dock.sheet-open { z-index: 7; }
+  .sheet-title { display: block; font-size: 1.2rem; font-weight: 750; }
+  .sheet-title span { font-size: 1rem; font-weight: 400; color: var(--soft); }
+  .adjust-done { display: flex; width: 100%; margin-top: .4rem; grid-column: 1 / -1; }
+
+  .frames-panel { padding-top: .9rem; }
+  .frames-panel .panel-head { margin-bottom: .6rem; }
+  .filters { gap: .5rem; }
+  .frame-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
+  .frame { padding: .45rem .45rem .5rem; }
+  .frame .chosen { width: 1.7rem; height: 1.7rem; top: .7rem; right: .7rem; }
+  .chosen .icon { width: 1.1rem; height: 1.1rem; }
+  /* Keyboard focus and scrolling stop clear of the pinned preview and the bottom bar. */
+  .frame, .more, .filter { scroll-margin-top: calc(40vh + 6rem); scroll-margin-bottom: 9rem; }
+  .more { margin-top: .75rem; color: var(--rose); font-weight: 700; border: 1px solid var(--line); background: var(--panel); border-radius: .63rem; }
+
+  .bar {
+    display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 4;
+    padding: .55rem .75rem calc(.7rem + env(safe-area-inset-bottom));
+    background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -6px 18px #67402c1a;
+  }
+  .bar-hint { text-align: center; color: var(--soft); font-size: 1rem; margin-bottom: .45rem; }
+  .bar-hint.error { color: #8d2839; font-weight: 700; }
+  .bar-actions { display: flex; gap: .6rem; }
+  .bar-actions .button { min-height: 3.5rem; font-size: 1.25rem; }
+  #bar-pick { flex: 0 0 auto; padding-inline: 1rem; }
+  #bar-main { flex: 1 1 auto; }
+  .bar .button:disabled { opacity: .7; }
+  .footer { padding-bottom: .5rem; }
+}
+/* Too short to pin the preview (a phone on its side): let it scroll with the page. */
+@media (max-width: 46rem) and (max-height: 34rem) {
+  .dock { position: static; box-shadow: none; }
+  .stage { height: 60vh; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; }
