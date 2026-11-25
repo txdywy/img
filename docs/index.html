@@ -126,11 +126,13 @@
               <button class="button secondary dock-view" type="button" id="dock-view" disabled><svg class="icon"><use href="#i-zoom"/></svg> 看大图</button>
             </div>
           </div>
-          <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
-          <details class="status-help" id="status-help" hidden>
-            <summary>怎么办？</summary>
-            <p id="status-help-text"></p>
-          </details>
+          <div class="status-box" id="status-box">
+            <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
+            <details class="status-help" id="status-help" hidden>
+              <summary>怎么办？</summary>
+              <p id="status-help-text"></p>
+            </details>
+          </div>
           <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
         </div>
       </section>

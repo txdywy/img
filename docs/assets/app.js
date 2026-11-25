@@ -95,6 +95,7 @@ const clamp = value => Math.max(0, Math.min(1, value));
 function showStatus(message, error = false, help = '') {
   status.textContent = message;
   status.classList.toggle('error', error);
+  $('status-box').classList.toggle('error', error);
   importProblem = error ? message : '';
   $('status-help').hidden = !help;
   $('status-help').open = false;

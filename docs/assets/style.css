@@ -83,7 +83,7 @@ h2 { font-size: 1.32rem; line-height: 1.4; font-weight: 750; }
 .file-hint { font-size: .94rem; color: var(--soft); overflow-wrap: anywhere; }
 .status { margin-top: .7rem; font-size: 1.125rem; color: var(--ok); overflow-wrap: anywhere; }
 .status.error { color: #8d2839; font-weight: 700; }
-.dock > .status { margin: .75rem 0 0; }
+.status-box > .status { margin: .75rem 0 0; }
 .status-help { margin-top: .25rem; color: var(--soft); }
 .status-help summary { display: inline-flex; align-items: center; min-height: var(--tap); cursor: pointer; color: var(--rose); font-weight: 700; text-decoration: underline; text-underline-offset: .2em; }
 .status-help p { margin-bottom: .4rem; }
@@ -300,11 +300,19 @@ dialog::backdrop { background: #32231995; }
     background: var(--paper); border-bottom: 1px solid var(--line); box-shadow: 0 8px 14px -10px #51362d40;
   }
   /* Only problems are shown here; the bottom bar already says what to do next. */
-  .dock > .status:not(.error) {
+  .status-box > .status:not(.error) {
     position: absolute; display: block; width: 1px; height: 1px; margin: 0; overflow: hidden; clip-path: inset(50%);
   }
-  .dock > .status { margin: .4rem 0 0; font-size: 1.0625rem; }
+  .status-box > .status { margin: 0; font-size: 1.0625rem; }
   .status-help { margin: 0; }
+  /* A problem shows on top of the preview, so the frames below never move out of sight. */
+  .status-box.error {
+    position: absolute; top: .9rem; left: 1.15rem; right: 1.15rem; z-index: 4;
+    display: flex; flex-wrap: wrap; align-items: center; column-gap: .75rem;
+    padding: .2rem .75rem; background: var(--panel); border: 2px solid #8d2839; border-radius: .75rem;
+    box-shadow: 0 4px 14px #33292333; max-height: calc(100% - 1.8rem); overflow-y: auto;
+  }
+  .status-box.error .status-help[open] { flex-basis: 100%; }
   .stage { aspect-ratio: auto; height: clamp(7rem, 40vh, 26rem); padding: .6rem; }
   .stage-badge {
     display: block; position: absolute; top: .4rem; left: .4rem; max-width: calc(50% - .4rem);
@@ -393,7 +401,7 @@ dialog::backdrop { background: #32231995; }
 }
 /* Too short to pin the preview (a phone on its side): let it scroll with the page. */
 @media (max-width: 46rem) and (max-height: 34rem) {
-  .dock { position: static; box-shadow: none; }
+  .dock { position: relative; box-shadow: none; }
   .stage { height: 60vh; }
 }
 @media (prefers-reduced-motion: reduce) {
