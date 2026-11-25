@@ -136,6 +136,11 @@ details[open] .chevron, [aria-expanded="true"] .chevron { transform: rotate(225d
 .choice[aria-pressed="true"] { color: #782538; background: var(--rose-light); border: 2px solid var(--rose); font-weight: 750; padding: calc(.4rem - 1px) calc(.6rem - 1px); }
 .shape { flex: none; display: block; height: 1.5rem; aspect-ratio: var(--r, 1); max-width: 2.4rem; border: 2px solid currentColor; border-radius: 3px; }
 .shape-original { --r: 1.25; border-style: dashed; }
+.shape-square { --r: 1; }
+.shape-portrait { --r: .75; }
+.shape-landscape { --r: 1.3333; }
+.shape-tall { --r: .5625; }
+.shape-wide { --r: 1.7778; }
 .fit-icon { flex: none; position: relative; width: 1.9rem; height: 1.5rem; border: 2px solid currentColor; border-radius: 3px; overflow: hidden; }
 .fit-icon::after { content: ""; position: absolute; background: currentColor; opacity: .45; border-radius: 50% 50% 0 0; }
 .fit-contain::after { left: .3rem; right: .3rem; top: .35rem; bottom: 0; }

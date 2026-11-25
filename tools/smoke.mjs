@@ -69,7 +69,7 @@ try {
       const wide = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       if (wide > 0) errors.push(`${at}: the page scrolls sideways by ${wide}px`);
       const small = await page.evaluate(() => [...document.querySelectorAll('button, summary, select, a.button')]
-        .filter(el => el.offsetParent && !el.closest('dialog, .skip'))
+        .filter(el => el.offsetParent && !el.closest('dialog, .skip, details:not([open]) > :not(summary)'))
         .filter(el => { const r = el.getBoundingClientRect(); return r.height < 44 || r.width < 44; })
         .map(el => el.textContent.trim() || el.id));
       if (small.length) errors.push(`${at}: tap targets under 44px: ${small.join(', ')}`);

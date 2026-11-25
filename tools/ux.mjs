@@ -123,7 +123,7 @@ async function commonChecks(page, at) {
   const sideways = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   if (sideways > 0) errors.push(`${at}: the page scrolls sideways by ${sideways}px`);
   const small = await page.evaluate(() => [...document.querySelectorAll('button, summary, a.button')]
-    .filter(el => el.offsetParent && !el.closest('dialog, .skip, [hidden]'))
+    .filter(el => el.offsetParent && !el.closest('dialog, .skip, [hidden], details:not([open]) > :not(summary)'))
     .filter(el => { const r = el.getBoundingClientRect(); return r.height < 44 || r.width < 44; })
     .map(el => el.textContent.trim() || el.id));
   if (small.length) errors.push(`${at}: tap targets under 44px: ${small.join(', ')}`);
@@ -153,19 +153,22 @@ async function phoneFlow(setup, photos) {
 
   // 1. A whole row of frames is visible under the preview right after choosing a photo.
   let seen = await page.evaluate(cardsInView);
-  if (!setup.tiny && !seen.length) {
+  // Short or zoomed screens don't pin the preview; there the list is scrolled to instead.
+  const pinned = await page.evaluate(() => getComputedStyle(document.querySelector('#dock')).position === 'sticky');
+  const tiny = setup.tiny || !pinned;
+  if (!tiny && !seen.length) {
     const info = await page.evaluate(() => ({
       stage: document.querySelector('#stage').offsetHeight, dock: document.querySelector('#dock').getBoundingClientRect().bottom,
       bar: document.querySelector('#bar').getBoundingClientRect().top, card: document.querySelector('#frames button')?.getBoundingClientRect().toJSON(),
     }));
     errors.push(`${at}: no whole frame card in view after choosing a photo ${JSON.stringify(info)}`);
   }
-  if (setup.tiny) {
-    // Very zoomed pages: once the list is scrolled up to the preview, a whole card fits.
-    await page.evaluate(() => {
+  if (tiny) {
+    // Very zoomed pages: once the list is scrolled up to the preview (or the top), a whole card fits.
+    await page.evaluate(pinned => {
       const grid = document.querySelector('#frames').getBoundingClientRect();
-      window.scrollBy(0, grid.top - document.querySelector('#dock').getBoundingClientRect().bottom);
-    });
+      window.scrollBy(0, grid.top - (pinned ? document.querySelector('#dock').getBoundingClientRect().bottom : 0));
+    }, pinned);
     await settle(page);
     if (!(await page.evaluate(cardsInView)).length) errors.push(`${at}: no whole frame card fits between preview and bar`);
     await page.evaluate(() => window.scrollTo(0, 0));
@@ -218,6 +221,14 @@ async function phoneFlow(setup, photos) {
   if (!note.includes('左右')) errors.push(`${at}: no warning that the sides were cut off (${JSON.stringify(note)})`);
   const done = await page.locator('#adjust [data-close-sheet]').boundingBox();
   if (!done || done.y < 0 || done.y + done.height > setup.viewport.height + 1) errors.push(`${at}: 调好了 is off screen in the adjust sheet`);
+  const sheet = await page.evaluate(() => {
+    const small = [...document.querySelectorAll('#adjust .sheet-body button')].filter(el => el.offsetParent && !el.closest('[hidden]'))
+      .filter(el => { const r = el.getBoundingClientRect(); return r.height < 44 || r.width < 44; }).map(el => el.textContent.trim());
+    const width = name => document.querySelector(`#ratio-choices .shape-${name}`).getBoundingClientRect().width;
+    return {small, square: width('square'), wide: width('wide')};
+  });
+  if (sheet.small.length) errors.push(`${at}: tap targets under 44px in the adjust sheet: ${sheet.small.join(', ')}`);
+  if (sheet.wide <= sheet.square) errors.push(`${at}: the shape icons all look the same`);
   await shoot(page, setup, '5-adjust');
   const before = page.url();
   await page.goBack();
@@ -286,7 +297,7 @@ async function phoneFlow(setup, photos) {
   if (problem.bar !== problem.text.replace(/。$/, '') && problem.bar !== problem.text) errors.push(`${at}: bar says ${problem.bar} but the error is ${problem.text}`);
   if (!problem.barError) errors.push(`${at}: the bar does not show the error`);
   if (problem.retry) errors.push(`${at}: a second 换照片 button is shown`);
-  if (!setup.tiny && !(await page.evaluate(cardsInView)).length) errors.push(`${at}: the error pushed every frame card out of view`);
+  if (!tiny && !(await page.evaluate(cardsInView)).length) errors.push(`${at}: the error pushed every frame card out of view`);
   await shoot(page, setup, '8-error');
 
   // 1e. A panorama gets a shorter preview box, not empty space.

@@ -105,6 +105,8 @@ function showStatus(message, error = false, help = '') {
 
 function showImportError(message, help = '') {
   showStatus(message, true, help + (isUserPhoto ? ' 上一张照片还在，可以接着用。' : ''));
+  // Keep the message, the preview and the frames on screen together.
+  showFrames();
 }
 
 function clearImportError() {
@@ -975,8 +977,17 @@ function layoutPage() {
   const rem = parseFloat(getComputedStyle(root).fontSize) || 16;
   const bar = $('bar');
   root.style.setProperty('--bar-h', `${phoneLayout.matches ? bar.offsetHeight : 0}px`);
+  const shape = image ? preview.width / preview.height : 1.38;
   if (!pinnedPhone.matches) {
     stage.style.height = '';
+    if (phoneLayout.matches) {
+      // Short or zoomed phones: the box is never taller than the photo needs.
+      const style = getComputedStyle(stage);
+      const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+      const natural = (stage.clientWidth - padX) / shape + padY;
+      if (natural < stage.offsetHeight) stage.style.height = `${Math.round(Math.max(7 * rem, natural))}px`;
+    }
   } else {
     const dock = $('dock');
     const style = getComputedStyle(stage);
@@ -988,7 +999,6 @@ function layoutPage() {
     const chrome = dock.offsetHeight - stage.offsetHeight;
     const room = window.innerHeight - bar.offsetHeight - chrome - reserve - .5 * rem;
     // Panoramas and long screenshots get a shorter box instead of empty space.
-    const shape = image ? preview.width / preview.height : 1.38;
     const natural = (stage.clientWidth - padX) / shape + padY;
     const height = Math.max(7 * rem, Math.min(room, natural, window.innerHeight * .5));
     stage.style.height = `${Math.round(height)}px`;
