@@ -22,6 +22,9 @@ const tileHeight = 116;
 const listSize = 6;
 const previewEdge = 1200;
 const maxImportSize = 50 * 1024 * 1024;
+// A small file can still hold an enormous picture; decoding it could run a phone
+// out of memory. 250 million pixels leaves room for 200-megapixel camera photos.
+const maxImportPixels = 250_000_000;
 const exportEdge = 4096;
 const exportPixels = 16_000_000;
 const isApple = /iPhone|iPad|iPod/.test(navigator.userAgent)
@@ -288,6 +291,11 @@ async function readPhoto(file) {
   const url = URL.createObjectURL(file);
   try {
     const photo = await loadImage(url);
+    if (photo.naturalWidth * photo.naturalHeight > maxImportPixels) {
+      const error = new Error('Too many pixels');
+      error.name = 'TooManyPixels';
+      throw error;
+    }
     const scale = Math.min(1, exportEdge / Math.max(photo.naturalWidth, photo.naturalHeight),
       Math.sqrt(exportPixels / (photo.naturalWidth * photo.naturalHeight)));
     const width = Math.max(1, Math.round(photo.naturalWidth * scale));
@@ -359,12 +367,14 @@ async function importPhoto(file) {
     requestPreview();
     refreshGalleryPreviews();
     track('photo_selected');
-  } catch {
+  } catch (error) {
     if (version !== importVersion) return;
     const heic = await isHeic(file);
     // Another photo may have been chosen while the file was checked.
     if (version !== importVersion) return;
-    if (heic) {
+    if (error?.name === 'TooManyPixels') {
+      showImportError('这张图片的像素太多，打不开。请换一张，或先把它缩小后再选。');
+    } else if (heic) {
       showImportError('这张是苹果手机常用的 HEIC 格式，这个浏览器打不开。可以先把它转成 JPG 再选：在相册里编辑后另存一份，或者给照片截个屏。在 iPhone 上用 Safari 打开本网站，也能直接选。');
     } else if (file.type && !file.type.startsWith('image/')) {
       showImportError('这不是照片文件。请选一张照片。');
