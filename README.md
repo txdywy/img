@@ -22,13 +22,19 @@
 python3 -m http.server 4173 --bind 127.0.0.1 --directory docs
 ```
 
-打开 [本地预览](http://127.0.0.1:4173)。发布目录为 `docs/`，无需构建或安装前端依赖。相框配色和定义在 `docs/assets/frames.js`，实时预览和成品共用 `docs/assets/render.js`。修改任何脚本或样式后，把 `index.html` 和各模块 import 中的 `?v=` 版本号统一加一，避免缓存拿到新旧混合的文件。`node tools/check-assets.mjs` 会检查版本号是否一致、引用的文件是否存在、脚本能否解析；推送到 `main` 和每个 PR 还会在 GitHub Actions 里跑它和两个浏览器测试：`tools/smoke.mjs` 在电脑和两种手机尺寸下打开页面、选图、选相框、导出并下载 JPG；`tools/ux.mjs` 按长辈体验 review 的各条，在 320、360、375×667、390 宽手机，150% 和 200% 字号，150% 和 200% 页面缩放，768 和 820 宽平板，1280 和 1440 宽电脑上检查：选完照片后能看到一整行相框、点分类能看到这一类的相框、保存后有「已保存」、调整面板能用返回键和点外面关闭、报错只有一句话、按钮不折行、页面不横向滚动、平板和电脑上预览和保存按钮不离开屏幕。它还检查：iPhone 上保存分两步且标题如实、没存就关掉有提示、换相框不丢祝福、「看大图」比页面预览大并能放大、安卓和微信只要 `image/*`、脚本起不来时显示提示，并覆盖 iPad 和安卓平板的横竖屏。`tools/webkit.mjs` 用 WebKit（iPhone、iPad Safari 和 iPhone 微信的内核）在 iPhone SE、12 mini、15 Pro Max 和 iPad 横竖屏上走一遍。`tools/old-syntax.mjs` 按 ES2019 解析全部脚本，避免 `?.`、`??` 这类老手机不认识的写法让整页打不开。设 `SHOT_DIR` 可保存截图，PR 的截图在 Actions 的 screenshots 附件里。本地运行需要 `playwright`、`acorn`、Chromium 和 WebKit。
+打开 [本地预览](http://127.0.0.1:4173)。发布目录为 `docs/`，无需构建或安装前端依赖。相框配色和定义在 `docs/assets/frames.js`，实时预览和成品共用 `docs/assets/render.js`。修改任何脚本或样式后，把 `index.html` 和各模块 import 中的 `?v=` 版本号统一加一，避免缓存拿到新旧混合的文件。`node tools/check-assets.mjs` 会检查版本号是否一致、引用的文件是否存在、脚本能否解析；推送到 `main` 和每个 PR 还会在 GitHub Actions 里跑它和两个浏览器测试：`tools/smoke.mjs` 在电脑和两种手机尺寸下打开页面、选图、选相框、导出并下载 JPG；`tools/ux.mjs` 按长辈体验 review 的各条，在 320、360、375×667、390 宽手机，150% 和 200% 字号，150% 和 200% 页面缩放，768 和 820 宽平板，1280 和 1440 宽电脑上检查：选完照片后能看到一整行相框、点分类能看到这一类的相框、保存后有「已保存」、调整面板能用返回键和点外面关闭、报错只有一句话、按钮不折行、页面不横向滚动、平板和电脑上预览和保存按钮不离开屏幕。它还检查：iPhone 上保存分两步且标题如实、没存就关掉有提示、换相框不丢祝福、「看大图」比页面预览大并能放大、安卓和微信只要 `image/*`、脚本起不来时显示提示，并覆盖 iPad 和安卓平板的横竖屏。`tools/webkit.mjs` 用 WebKit（iPhone、iPad Safari 和 iPhone 微信的内核）在 iPhone SE、12 mini、15 Pro Max 和 iPad 横竖屏上走一遍。`tools/speed.mjs` 模拟国内跨境网络量首屏时间。`tools/old-syntax.mjs` 按 ES2019 解析全部脚本，避免 `?.`、`??` 这类老手机不认识的写法让整页打不开。设 `SHOT_DIR` 可保存截图，PR 的截图在 Actions 的 screenshots 附件里。本地运行需要 `playwright`、`acorn`、Chromium 和 WebKit。
 
 ## 部署
 
 GitHub 仓库的 **Settings → Pages → Build and deployment** 使用 **Deploy from a branch**，选择 `main` 和 `/docs`。推送到 `main` 后，GitHub Pages 会自动重新发布。
 
 自定义域名使用 `img.hackx64.eu.org`。先在 GitHub 的账号设置中验证域名，再在仓库 Pages 设置中填写自定义域名。Cloudflare DNS 中将 `img` 的 CNAME 指向 `txdywy.github.io`。验证并签发 GitHub Pages 证书时先用 DNS only，HTTPS 可用后启用 Cloudflare 代理，并通过匹配该主机名的 Configuration Rule 将源站 TLS 设为 Strict。静态文件使用 Cloudflare 默认缓存行为，HTML 保持可重新验证。参阅 [GitHub Pages 自定义域名](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site)。
+
+### 国内打开速度
+
+网站走 Cloudflare 海外节点，从国内每个来回约 0.2~0.27 秒，所以页面尽量少等来回：`index.html` 用 `modulepreload` 一次请求全部脚本（新增模块时在这里加一行，版本号同样要统一）；示例照片压到 960×720、约 80 KB；`docs/sw.js` 在第一次打开后把页面和文件存在手机上，之后再开直接用存好的文件，没网也能打开。页面本身有网时总是取最新的，带 `?v=` 的文件按版本保存，换版本后旧文件自动清掉。iPhone 微信没有 Service Worker，照常从网络加载。要整体停用，把 `docs/sw.js` 换成调用 `self.registration.unregister()` 并删除缓存的版本。`tools/speed.mjs` 模拟 230 ms 来回的跨境网络，量出示例照片显示的时间，在 GitHub Actions 里随测试一起跑。
+
+Cloudflare 后台可以再开（免费）：Speed → Optimization 里的 HTTP/3、0-RTT 和 Early Hints；Caching → Cache Rules 加一条，让 `img.hackx64.eu.org/assets/` 下带 `?v=` 的文件浏览器和边缘都缓存一年，HTML 保持可重新验证。
 
 GA4 的 Web 数据流衡量 ID 配置在 `docs/assets/analytics.js`。统计只在生产域名且访客允许后运行，记录页面访问、选图、选框、生成成品、点击下载和系统分享操作。网站可观察到的最后一步取决于浏览器，用户能否在相册或下载文件夹找回成品由真机测试验证。
 

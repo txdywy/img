@@ -29,6 +29,9 @@ jobs:
         run: node tools/smoke.mjs
         env:
           SHOT_DIR: screenshots
+      - name: Speed on a slow cross-border link (like opening it from mainland China)
+        if: always()
+        run: node tools/speed.mjs
       - name: Elder-friendly layout checks (phones, large text, zoom, tablets, computers)
         if: always()
         run: node tools/ux.mjs

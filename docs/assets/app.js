@@ -1,7 +1,7 @@
-import {frames, categories, byId} from './frames.js?v=13';
-import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=13';
-import {setupAnalytics, track} from './analytics.js?v=13';
-import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=13';
+import {frames, categories, byId} from './frames.js?v=14';
+import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=14';
+import {setupAnalytics, track} from './analytics.js?v=14';
+import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=14';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -1103,3 +1103,11 @@ loadImage('./assets/example.webp').then(sample => {
 setupAnalytics();
 // Tells old.js that the page started; very old browsers never get here and see its note.
 window.frameAppReady = true;
+
+// Keep the page's files on the phone so the next visit opens without downloading
+// them again (see sw.js). WeChat on iPhone has no service workers and skips this.
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  const register = () => navigator.serviceWorker.register('./sw.js').catch(() => {});
+  if (document.readyState === 'complete') register();
+  else window.addEventListener('load', register);
+}
