@@ -33,6 +33,8 @@ const errors = [];
 try {
   const shots = process.env.SHOT_DIR;
   if (shots) await mkdir(shots, {recursive: true});
+  // The preview redraws on the next animation frame, so wait for it rather than read at once.
+  const waitFor = (page, check, arg) => page.waitForFunction(check, arg, {timeout: 3000}).then(() => true, () => false);
   const shoot = async (page, name) => shots && page.screenshot({path: join(shots, `${name}.png`)});
   for (const viewport of [{width: 1280, height: 900}, {width: 390, height: 844}, {width: 360, height: 780}]) {
     const phone = viewport.width < 700;
@@ -50,8 +52,9 @@ try {
 
     // A category tap puts that category's first frame on the photo straight away.
     await page.locator('#filters button', {hasText: '节庆'}).click();
-    const current = await page.locator('#preview').getAttribute('aria-label');
-    if (!current.includes('福寿安康')) errors.push(`${at}: tapping 节庆 did not change the frame (${current})`);
+    if (!(await waitFor(page, () => document.querySelector('#preview').getAttribute('aria-label').includes('福寿安康')))) {
+      errors.push(`${at}: tapping 节庆 did not change the frame (${await page.locator('#preview').getAttribute('aria-label')})`);
+    }
     await page.locator('#filters button', {hasText: '全部'}).click();
 
     if (phone) {
@@ -60,10 +63,12 @@ try {
       const far = page.locator('#frames button[data-frame]').nth(20);
       await far.scrollIntoViewIfNeeded();
       await far.click();
+      const name = (await far.innerText()).trim();
+      if (!(await waitFor(page, text => document.querySelector('#stage-badge').textContent.includes(text), name))) {
+        errors.push(`${at}: the preview label did not follow the frame`);
+      }
       const box = await page.locator('#preview').boundingBox();
       if (!box || box.y < 0 || box.y + box.height > viewport.height) errors.push(`${at}: the preview left the screen while picking a frame`);
-      const name = await far.innerText();
-      if (!(await page.locator('#stage-badge').innerText()).includes(name.trim())) errors.push(`${at}: the preview label did not follow the frame`);
       await shoot(page, `${viewport.width}-2-picking`);
       const wide = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       if (wide > 0) errors.push(`${at}: the page scrolls sideways by ${wide}px`);
