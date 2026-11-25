@@ -1045,9 +1045,12 @@ function scheduleLayout() {
 // the window's height only when the phone is turned (a new width) or the window
 // really changes size (split screen), not while someone is typing. Right after a turn
 // the browser may report the height in steps, so for a moment every new value counts.
+// The page's own size is used, not the visible part of it, so pinching to zoom in
+// (which shrinks the visible part) never resizes anything either.
 function steadyViewHeight() {
-  const width = window.innerWidth;
-  const height = window.innerHeight;
+  const root = document.documentElement;
+  const width = root.clientWidth || window.innerWidth;
+  const height = root.clientHeight || window.innerHeight;
   const now = Date.now();
   const field = document.activeElement;
   const typing = field && field.tagName === 'INPUT' && field.type === 'text';
@@ -1095,11 +1098,11 @@ function layoutPage() {
     // Otherwise it may only get smaller, when that is what keeps a row of frames in sight:
     // picking frames, categories or saving never makes it grow and shrink.
     const current = parseFloat(stage.style.height) || 0;
-    const fresh = stageFor !== image || stageWidth !== window.innerWidth || stageView !== view || stageRem !== rem;
+    const fresh = stageFor !== image || stageWidth !== steadyWidth || stageView !== view || stageRem !== rem;
     if (fresh || !current || height < current - 1) {
       stage.style.height = `${height}px`;
       stageFor = image;
-      stageWidth = window.innerWidth;
+      stageWidth = steadyWidth;
       stageView = view;
       stageRem = rem;
     }
