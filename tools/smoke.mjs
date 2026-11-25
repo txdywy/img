@@ -65,7 +65,12 @@ try {
       await far.click();
       const name = (await far.innerText()).trim();
       if (!(await waitFor(page, text => document.querySelector('#stage-badge').textContent.includes(text), name))) {
-        errors.push(`${at}: the preview label did not follow the frame`);
+        const seen = await page.evaluate(() => ({
+          badge: document.querySelector('#stage-badge').textContent,
+          label: document.querySelector('#preview').getAttribute('aria-label'),
+          chosen: document.querySelector('#frames [aria-pressed="true"]')?.textContent,
+        }));
+        errors.push(`${at}: the preview label did not follow the frame (tapped ${JSON.stringify(name)}, saw ${JSON.stringify(seen)})`);
       }
       const box = await page.locator('#preview').boundingBox();
       if (!box || box.y < 0 || box.y + box.height > viewport.height) errors.push(`${at}: the preview left the screen while picking a frame`);
