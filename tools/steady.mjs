@@ -175,7 +175,12 @@ async function phoneChecks(viewport, label, font = 0) {
     return `${window.innerWidth}x${window.innerHeight}, page ${root.clientWidth}x${root.clientHeight}, zoom ${window.visualViewport ? visualViewport.scale.toFixed(2) : '?'}, ` +
       `bar ${document.querySelector('#bar').offsetHeight}, frames reserve ${card ? Math.round(card.getBoundingClientRect().bottom - panel) : '?'}`;
   });
-  if (Math.abs(back.stage[1] - pinned.stage[1]) > 1) errors.push(`${at}: after turning the phone and back (window ${seen}) the preview is ${back.stage[1]}px, was ${pinned.stage[1]}px (${pinnedSeen})`);
+  // WebKit's phone emulation can stay zoomed out after a turn, which enlarges text
+  // (bigger bottom bar); then the box may only be smaller, to keep a row of frames in sight.
+  const barNow = await page.evaluate(() => document.querySelector('#bar').offsetHeight);
+  const barChanged = !pinnedSeen.startsWith(`bar ${barNow},`);
+  const wrong = barChanged ? back.stage[1] > pinned.stage[1] + 1 : Math.abs(back.stage[1] - pinned.stage[1]) > 1;
+  if (wrong) errors.push(`${at}: after turning the phone and back (window ${seen}) the preview is ${back.stage[1]}px, was ${pinned.stage[1]}px (${pinnedSeen})`);
   if (!start.stage[1]) errors.push(`${at}: no preview box on first load`);
   await page.close();
 }
