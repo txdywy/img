@@ -39,6 +39,7 @@ let image = null;
 let previewSource = null;
 let thumbSource = null;
 let isUserPhoto = false;
+let sampleShown = false;
 let selected = frames[0];
 let options = {...defaults};
 const adjustmentHistory = [];
@@ -111,7 +112,8 @@ function updateBar() {
   $('bar-icon').firstElementChild.setAttribute('href', isUserPhoto ? '#i-save' : '#i-photo');
   const problem = $('save-status').textContent;
   const hint = $('bar-hint');
-  hint.textContent = problem || (isUserPhoto ? '点下面的相框换样式，满意了就保存' : '上面是示例。先选一张自己的照片');
+  hint.textContent = problem || (isUserPhoto ? '点下面的相框换样式，满意了就保存'
+    : sampleShown ? '上面是示例。先选一张自己的照片' : '先选一张自己的照片');
   hint.classList.toggle('error', Boolean(problem));
 }
 
@@ -885,6 +887,8 @@ $('stage-placeholder').hidden = false;
 loadImage(new URL('./example.webp', import.meta.url).href).then(sample => {
   if (isUserPhoto) return;
   setImage(sample);
+  sampleShown = true;
+  updateBar();
   syncOptions();
   refreshGalleryPreviews();
   requestPreview();
