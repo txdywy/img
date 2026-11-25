@@ -13,10 +13,17 @@
   <meta property="og:title" content="拾光相框 · 给照片加个相框">
   <meta property="og:description" content="39 款免费相框，选照片、挑相框、保存。照片留在自己的设备上。">
   <meta property="og:url" content="https://img.hackx64.eu.org/">
+  <meta property="og:image" content="https://img.hackx64.eu.org/assets/share.jpg">
+  <!-- QQ and some phone browsers read these when the link is shared. -->
+  <meta itemprop="name" content="拾光相框 · 给照片加个相框">
+  <meta itemprop="description" content="39 款免费相框，选照片、挑相框、保存。照片留在自己的设备上。">
+  <meta itemprop="image" content="https://img.hackx64.eu.org/assets/share.jpg">
+  <meta name="format-detection" content="telephone=no">
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./assets/style.css?v=12">
+  <link rel="stylesheet" href="./assets/style.css?v=13">
   <link rel="preload" as="image" href="./assets/example.webp" type="image/webp">
-  <script type="module" src="./assets/app.js?v=12"></script>
+  <script type="module" src="./assets/app.js?v=13"></script>
+  <script src="./assets/old.js?v=13" defer></script>
 </head>
 <body>
   <svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -49,6 +56,7 @@
       <div class="privacy"><svg class="icon"><use href="#i-lock"/></svg><span>永久免费 · 照片留在本机</span></div>
     </section>
 
+    <p class="old-browser" id="old-browser" role="alert" hidden>这个浏览器版本太旧，相框工具打不开。请换手机自带的浏览器打开这个网址，或者把微信、手机系统更新一下再试。</p>
     <section class="workspace" id="editor" aria-label="相框工具">
       <section class="panel photo-panel" aria-labelledby="photo-title">
         <header class="panel-head">
@@ -198,7 +206,7 @@
     <div class="dialog-inner">
       <h2 id="frame-dialog-title">相框预览</h2>
       <div class="zoom-view" id="zoom-view" role="region" aria-label="成品预览"><canvas id="frame-preview" role="img" aria-label="全图预览"></canvas></div>
-      <div class="zoom-actions" id="zoom-actions" hidden>
+      <div class="zoom-actions" id="zoom-actions">
         <button class="button secondary" id="zoom-toggle" type="button" aria-pressed="false">放大看清两端</button>
         <button class="button secondary" id="zoom-prev" type="button" hidden>往左看</button>
         <button class="button secondary" id="zoom-next" type="button" hidden>往右看</button>
@@ -215,8 +223,8 @@
 
   <dialog id="result-dialog" aria-labelledby="result-title">
     <div class="dialog-inner">
-      <h2 id="result-title">相框照片做好了</h2>
-      <p id="result-lead" class="result-lead" aria-live="polite">还差一步。点「下载照片」，把成品存到设备。</p>
+      <h2 id="result-title">还差一步：把照片存好</h2>
+      <p id="result-lead" class="result-lead" aria-live="polite">点下面的「下载照片」，存到这台设备。</p>
       <img id="result-image" alt="加好相框的成品照片">
       <div class="result-actions">
         <a class="button primary" id="result-download" download><svg class="icon"><use href="#i-save"/></svg> <span id="download-text">下载照片</span></a>

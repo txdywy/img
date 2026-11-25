@@ -170,6 +170,7 @@ details[open] .chevron, [aria-expanded="true"] .chevron { transform: rotate(225d
 .save:disabled { background: #f3e9e2; color: #745e54; }
 .save-hint { color: var(--soft); font-size: 1.125rem; margin-top: .42rem; }
 .save-hint.saved, .result-lead.saved { color: var(--ok); font-weight: 700; }
+.save-hint.pending { color: #8a4b00; font-weight: 700; }
 .frame-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap); }
 .frame {
   min-width: 0; position: relative; display: flex; flex-direction: column; align-items: stretch; gap: .32rem;
@@ -217,6 +218,12 @@ dialog::backdrop { background: #32231995; }
 .zoom-view.zoomed #frame-preview { max-width: none; max-height: none; width: auto; }
 .zoom-view.tall { max-height: 60vh; }
 .zoom-view.tall #frame-preview { width: 100%; height: auto; }
+.zoom-view.both { max-height: 60vh; }
+#frame-preview { cursor: zoom-in; }
+.zoom-view.zoomed #frame-preview { cursor: zoom-out; }
+/* Shown by old.js only when the page could not start (very old phones and browsers). */
+.old-browser { margin: 1rem 0; padding: 1rem 1.1rem; font-size: 1.25rem; font-weight: 700; line-height: 1.6; color: #8d2839; background: var(--panel); border: 2px solid #8d2839; border-radius: .8rem; }
+.old-browser[hidden], .app-failed .workspace, .app-failed .bar { display: none; }
 .zoom-actions { display: flex; flex-wrap: wrap; gap: var(--gap); margin-top: .75rem; }
 .zoom-hint { margin-top: .5rem; color: var(--soft); }
 #corner-preview { display: block; max-width: 100%; height: auto; margin-top: .5rem; }
@@ -313,7 +320,7 @@ dialog::backdrop { background: #32231995; }
     box-shadow: 0 4px 14px #33292333; max-height: calc(100% - 1.8rem); overflow-y: auto;
   }
   .status-box.error .status-help[open] { flex-basis: 100%; }
-  .stage { aspect-ratio: auto; height: clamp(7rem, 40vh, 26rem); padding: .6rem; }
+  .stage { aspect-ratio: auto; height: 40vh; height: clamp(7rem, 40vh, 26rem); padding: .6rem; }
   .stage-badge {
     display: block; position: absolute; top: .4rem; left: .4rem; max-width: calc(50% - .4rem);
     padding: .1rem .55rem; border-radius: .4rem; background: #fffcf7e8; color: var(--ink);
@@ -324,7 +331,7 @@ dialog::backdrop { background: #32231995; }
 
   /* 调整, 改字 and 看大图 sit on the corners of the preview instead of taking a row of their own. */
   .dock-tools {
-    position: absolute; inset: .4rem; margin: 0; border: 0; pointer-events: none;
+    position: absolute; top: .4rem; right: .4rem; bottom: .4rem; left: .4rem; margin: 0; border: 0; pointer-events: none;
     display: grid; grid-template: "x words" auto "y y" 1fr "adjust view" auto / 1fr 1fr; align-items: end;
   }
   .dock-tools > * { pointer-events: auto; min-width: 0; }
@@ -345,7 +352,7 @@ dialog::backdrop { background: #32231995; }
     padding: 1rem .9rem 0; background: var(--panel); text-align: left; white-space: normal; cursor: auto;
     border-top: 1px solid var(--line); border-radius: 1.1rem 1.1rem 0 0; box-shadow: 0 -10px 34px #33292340;
   }
-  .sheet-backdrop { display: block; position: fixed; inset: 0; z-index: 5; background: #3229191f; }
+  .sheet-backdrop { display: block; position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 5; background: #3229191f; }
   .sheet-backdrop[hidden] { display: none; }
   /* The pinned preview is its own layer; lift it while a sheet is open so the sheet covers the bottom bar. */
   .dock.sheet-open { z-index: 7; }
@@ -382,12 +389,26 @@ dialog::backdrop { background: #32231995; }
   .bar-hint { text-align: center; color: var(--soft); font-size: 1rem; line-height: 1.35; margin-bottom: .4rem; }
   .bar-hint.error { color: #8d2839; font-weight: 700; }
   .bar-hint.saved { color: var(--ok); font-weight: 700; }
+  .bar-hint.pending { color: #8a4b00; font-weight: 700; }
   .bar-actions { display: flex; gap: .6rem; }
   .bar-actions .button { min-height: 3.5rem; font-size: 1.25rem; white-space: nowrap; overflow-wrap: normal; }
   #bar-pick { flex: 0 0 auto; padding-inline: 1rem; }
   #bar-main { flex: 1 1 auto; }
   .bar .button:disabled { opacity: .7; }
   .footer { padding-bottom: .5rem; }
+
+  /* 看大图 uses the whole screen, so the photo is bigger than on the page, not smaller. */
+  #frame-dialog { width: 100%; max-width: 100%; height: 100%; max-height: 100%; margin: 0; border: 0; border-radius: 0; }
+  #frame-dialog .dialog-inner {
+    display: flex; flex-direction: column; min-height: 100%;
+    padding: calc(.6rem + env(safe-area-inset-top)) .5rem calc(.6rem + env(safe-area-inset-bottom));
+  }
+  #frame-dialog h2 { font-size: 1.15rem; margin-bottom: .4rem; }
+  #frame-preview { max-height: calc(100vh - 13rem); }
+  .zoom-view.both, .zoom-view.tall { max-height: calc(100vh - 15rem); }
+  #frame-dialog form { margin-top: auto; padding-top: .75rem; }
+  #frame-dialog form .button { width: 100%; min-height: 3.25rem; font-size: 1.2rem; }
+  .zoom-actions .button { flex: 1 1 auto; }
 }
 /* Very narrow (small phones, zoomed pages): smaller bar text, no icon, so nothing wraps. */
 @media (max-width: 22rem) {

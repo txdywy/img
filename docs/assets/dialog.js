@@ -22,7 +22,7 @@ export function releaseLayer(layer) {
   const index = layers.indexOf(layer);
   if (index < 0) return;
   layers.splice(index, 1);
-  if (history.state?.frameLayer) {
+  if (history.state && history.state.frameLayer) {
     ownBacks++;
     history.back();
   }
@@ -33,11 +33,13 @@ window.addEventListener('popstate', () => {
     ownBacks--;
     return;
   }
-  layers.pop()?.close();
+  const layer = layers.pop();
+  if (layer) layer.close();
 });
 
 function restore(dialog) {
-  openers.get(dialog)?.focus({preventScroll: true});
+  const opener = openers.get(dialog);
+  if (opener) opener.focus({preventScroll: true});
   openers.delete(dialog);
 }
 
@@ -49,7 +51,8 @@ export function openDialog(dialog, opener = document.activeElement) {
     return;
   }
   dialog.setAttribute('open', '');
-  dialog.querySelector('[autofocus], button, a[href]')?.focus();
+  const first = dialog.querySelector('[autofocus], button, a[href]');
+  if (first) first.focus();
 }
 
 export function closeDialog(dialog) {

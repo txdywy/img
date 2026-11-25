@@ -19,10 +19,12 @@ jobs:
           node-version: 22
       - name: Asset versions and script syntax
         run: node tools/check-assets.mjs
-      - name: Install Playwright for the smoke test
+      - name: Install Playwright and the syntax checker
         run: |
-          npm install --no-save --no-package-lock playwright@1.49.1
+          npm install --no-save --no-package-lock playwright@1.49.1 acorn@8.14.0
           npx playwright install --with-deps chromium
+      - name: Syntax older phones understand (iOS 12, older Android browsers)
+        run: node tools/old-syntax.mjs
       - name: Browser smoke test
         run: node tools/smoke.mjs
         env:
@@ -37,6 +39,33 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: screenshots
+          path: screenshots
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # WebKit is the engine behind iPhone and iPad Safari and iPhone WeChat. Playwright
+  # 1.49's WebKit build and its system libraries match Ubuntu 24.04, not 26.04.
+  webkit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright WebKit
+        run: |
+          npm install --no-save --no-package-lock playwright@1.49.1
+          npx playwright install --with-deps webkit
+      - name: iPhone and iPad engine (WebKit)
+        run: node tools/webkit.mjs
+        env:
+          SHOT_DIR: screenshots
+      - name: Keep the screenshots for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webkit-screenshots
           path: screenshots
           retention-days: 14
           if-no-files-found: ignore
