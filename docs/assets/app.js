@@ -427,6 +427,8 @@ document.addEventListener('paste', event => {
   void importPhoto(file);
 });
 
+const coarsePointer = window.matchMedia('(pointer: coarse)');
+
 function syncOptions() {
   const original = options.ratio === 'original';
   $('ratio').value = options.ratio;
@@ -439,6 +441,7 @@ function syncOptions() {
     if (Math.abs(difference) > .005) crop = {x: difference > 0, y: difference < 0};
   }
   $('crop-note').hidden = !crop;
+  $('crop-hold').hidden = !(crop?.y && coarsePointer.matches);
   $('position').hidden = !crop;
   $('position-x').hidden = !crop?.x;
   $('position-y').hidden = !crop?.y;
@@ -486,22 +489,54 @@ $('undo').addEventListener('click', () => {
   if ($('undo').disabled) $('rotate').focus();
 });
 
-// Drag the photo inside the frame when part of it is cropped.
-preview.addEventListener('pointerdown', event => {
-  if (!crop || !previewLayout || event.button > 0) return;
-  event.preventDefault();
-  preview.setPointerCapture(event.pointerId);
+// Drag the photo inside the frame when part of it is cropped. The preview allows
+// vertical page scrolling on touch screens, so an up-and-down crop on a phone
+// starts after holding the finger still for a moment.
+const holdDelay = 350;
+const holdSlop = 10;
+let hold = null;
+
+function startPan(event) {
   const {area} = previewLayout;
   const place = placement(image, options, area);
   const scale = preview.getBoundingClientRect().width / preview.width;
+  preview.setPointerCapture?.(event.pointerId);
   pan = {
     id: event.pointerId, x: event.clientX, y: event.clientY, start: options,
     rangeX: crop.x ? (place.w - area.w) * scale : 0,
     rangeY: crop.y ? (place.h - area.h) * scale : 0,
   };
   stage.classList.add('panning');
+}
+
+function cancelHold() {
+  if (!hold) return;
+  clearTimeout(hold.timer);
+  hold = null;
+}
+
+preview.addEventListener('pointerdown', event => {
+  if (!crop || !previewLayout || event.button > 0 || pan) return;
+  if (event.pointerType === 'touch' && crop.y) {
+    cancelHold();
+    const down = {pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY};
+    hold = {id: event.pointerId, x: event.clientX, y: event.clientY, timer: setTimeout(() => {
+      hold = null;
+      if (!crop || !previewLayout) return;
+      startPan(down);
+      pan.held = true;
+      stage.classList.add('held');
+    }, holdDelay)};
+    return;
+  }
+  event.preventDefault();
+  startPan(event);
 });
 preview.addEventListener('pointermove', event => {
+  if (hold && event.pointerId === hold.id) {
+    if (Math.hypot(event.clientX - hold.x, event.clientY - hold.y) > holdSlop) cancelHold();
+    return;
+  }
   if (!pan || event.pointerId !== pan.id) return;
   const next = {...options};
   if (pan.rangeX > 1) next.x = clamp(pan.start.x - (event.clientX - pan.x) / pan.rangeX);
@@ -509,11 +544,26 @@ preview.addEventListener('pointermove', event => {
   options = next;
   requestPreview();
 });
+// Once a held drag has started, keep the finger from scrolling the page.
+preview.addEventListener('touchmove', event => {
+  if (pan?.held && event.cancelable) event.preventDefault();
+}, {passive: false});
+// A long press would otherwise open the image menu on phones.
+preview.addEventListener('contextmenu', event => {
+  if (crop) event.preventDefault();
+});
 function endPan(event) {
+  if (hold && event.pointerId === hold.id) cancelHold();
   if (!pan || event.pointerId !== pan.id) return;
   const {start} = pan;
   pan = null;
-  stage.classList.remove('panning');
+  stage.classList.remove('panning', 'held');
+  // The browser took the gesture over for scrolling: undo any small shift.
+  if (event.type === 'pointercancel') {
+    options = start;
+    requestPreview();
+    return;
+  }
   if (start.x === options.x && start.y === options.y) return;
   remember(start);
   redrawAdjustment();
