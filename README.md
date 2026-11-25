@@ -18,7 +18,7 @@
 python3 -m http.server 4173 --bind 127.0.0.1 --directory docs
 ```
 
-打开 [本地预览](http://127.0.0.1:4173)。发布目录为 `docs/`，无需构建或安装前端依赖。相框配色和定义在 `docs/assets/frames.js`，实时预览和成品共用 `docs/assets/render.js`。修改任何脚本或样式后，把 `index.html` 和各模块 import 中的 `?v=` 版本号统一加一，避免缓存拿到新旧混合的文件。
+打开 [本地预览](http://127.0.0.1:4173)。发布目录为 `docs/`，无需构建或安装前端依赖。相框配色和定义在 `docs/assets/frames.js`，实时预览和成品共用 `docs/assets/render.js`。修改任何脚本或样式后，把 `index.html` 和各模块 import 中的 `?v=` 版本号统一加一，避免缓存拿到新旧混合的文件。`node tools/check-assets.mjs` 会检查版本号是否一致、引用的文件是否存在、脚本能否解析；推送到 `main` 和每个 PR 还会在 GitHub Actions 里跑它和一个浏览器冒烟测试（`tools/smoke.mjs`：打开页面、选图、选相框、导出并下载 JPG）。
 
 ## 部署
 
