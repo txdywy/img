@@ -21,6 +21,11 @@
   background: var(--paper);
 }
 *, *::before, *::after { box-sizing: border-box; }
+/* A quick double tap (common when a tap seems not to have worked) must not zoom the
+   page; pinching to zoom still works. Taps show the calm pressed colours below,
+   not the browser's grey or blue flash. */
+html { touch-action: manipulation; }
+button, summary, a, label, input { -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
 body { margin: 0; font-size: 1rem; line-height: 1.55; }
 h1, h2, p { margin: 0; }
@@ -77,6 +82,9 @@ h2 { font-size: 1.32rem; line-height: 1.4; font-weight: 750; }
 .primary:hover { background: var(--rose-hover); }
 .secondary { color: var(--rose); background: var(--panel); border-color: var(--edge); }
 .secondary:hover { background: var(--rose-light); border-color: #c7989b; }
+/* Pressed: the colour deepens at once, nothing grows, shrinks or moves. */
+.primary:active, .save:active:not(:disabled) { background: var(--rose-hover); }
+.secondary:active, .choice:active, .filter:active, .more:active, .frame:active { background: #f6dede; }
 
 /* Step 1: photo */
 .photo-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem; margin: 0 0 .75rem; }
@@ -320,7 +328,12 @@ dialog::backdrop { background: #32231995; }
     box-shadow: 0 4px 14px #33292333; max-height: calc(100% - 1.8rem); overflow-y: auto;
   }
   .status-box.error .status-help[open] { flex-basis: 100%; }
-  .stage { aspect-ratio: auto; height: 40vh; height: clamp(7rem, 40vh, 26rem); padding: .6rem; }
+  .stage {
+    aspect-ratio: auto; padding: .6rem;
+    /* Close to the size app.js gives it (the sample photo's shape, room for a row of
+       frames), so the box hardly changes when the page finishes loading. */
+    height: 40vh; height: max(7rem, min(calc((100vw - 2.7rem - 2px) * .75 + 1.2rem), 50vh, calc(100vh - 20.3rem - 31.8vw)));
+  }
   .stage-badge {
     display: block; position: absolute; top: .4rem; left: .4rem; max-width: calc(50% - .4rem);
     padding: .1rem .55rem; border-radius: .4rem; background: #fffcf7e8; color: var(--ink);
@@ -353,6 +366,9 @@ dialog::backdrop { background: #32231995; }
     border-top: 1px solid var(--line); border-radius: 1.1rem 1.1rem 0 0; box-shadow: 0 -10px 34px #33292340;
   }
   .sheet-backdrop { display: block; position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 5; background: #3229191f; }
+  /* Sheets rise gently into place: a short fade and a small slide, no bounce. */
+  .sheet[open] .sheet-body { animation: rise .2s ease-out; }
+  .sheet-backdrop:not([hidden]) { animation: fade-in .2s ease-out; }
   .sheet-backdrop[hidden] { display: none; }
   /* The pinned preview is its own layer; lift it while a sheet is open so the sheet covers the bottom bar. */
   .dock.sheet-open { z-index: 7; }
@@ -420,11 +436,18 @@ dialog::backdrop { background: #32231995; }
   .sheet summary, .dock-tools .dock-view { padding-inline: .5rem; font-size: 1rem; }
   .dock-tools .icon { display: none; }
 }
-/* Too short to pin the preview (a phone on its side): let it scroll with the page. */
-@media (max-width: 46rem) and (max-height: 34rem) {
-  .dock { position: relative; box-shadow: none; }
-  .stage { height: 60vh; }
+/* Too short to pin the preview (a phone on its side): let it scroll with the page.
+   app.js decides (class short-phone) from the window's height, ignoring the keyboard
+   and the address bar, so typing a blessing does not unpin and resize the preview. */
+@media (max-width: 46rem) {
+  .short-phone .dock { position: relative; box-shadow: none; }
 }
+/* Dialogs fade in; nothing ever zooms or bounces. */
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes rise { from { opacity: 0; transform: translateY(.75rem); } }
+dialog[open] { animation: fade-in .18s ease-out; }
+dialog[open]::backdrop { animation: fade-in .18s ease-out; }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition: none !important; }
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+  dialog::backdrop { animation: none !important; }
 }

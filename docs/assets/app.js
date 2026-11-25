@@ -1,7 +1,7 @@
-import {frames, categories, byId} from './frames.js?v=14';
-import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=14';
-import {setupAnalytics, track} from './analytics.js?v=14';
-import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=14';
+import {frames, categories, byId} from './frames.js?v=15';
+import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=15';
+import {setupAnalytics, track} from './analytics.js?v=15';
+import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=15';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -40,7 +40,8 @@ const isAndroid = /Android|HarmonyOS|OpenHarmony/i.test(navigator.userAgent);
 const coarsePointer = window.matchMedia('(pointer: coarse)');
 // The phone layout: preview pinned on top, one big button at the bottom.
 const phoneLayout = window.matchMedia('(max-width: 46rem)');
-const pinnedPhone = window.matchMedia('(max-width: 46rem) and (min-height: 34.01rem)');
+// The preview stays pinned on phones tall enough for it (layoutPage decides, see steadyHeight).
+const pinnedPhone = {get matches() { return phoneLayout.matches && !document.documentElement.classList.contains('short-phone'); }};
 const twoColumns = window.matchMedia('(min-width: 46.01rem)');
 let exportNumber = 0;
 
@@ -334,14 +335,23 @@ filters.addEventListener('click', event => {
   requestAnimationFrame(() => revealCard(grid.firstElementChild));
 });
 
+// The page glides to where it needs to be instead of jumping there, so the eye can
+// follow it; with "reduce motion", or in browsers without smooth scrolling, it moves at once.
+const calmMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+function glideBy(top) {
+  if (Math.abs(top) < 1) return;
+  if ('scrollBehavior' in document.documentElement.style && !calmMotion.matches) window.scrollBy({top, behavior: 'smooth'});
+  else window.scrollBy(0, top);
+}
+
 // Scroll just enough that a frame card sits fully between the pinned preview and the bottom bar.
 function revealCard(card) {
   if (!card) return;
   const rect = card.getBoundingClientRect();
   const top = pinnedPhone.matches ? $('dock').getBoundingClientRect().bottom + 8 : 8;
   const bottom = (phoneLayout.matches ? $('bar').getBoundingClientRect().top : window.innerHeight) - 8;
-  if (rect.bottom > bottom) window.scrollBy(0, Math.min(rect.bottom - bottom, rect.top - top));
-  else if (rect.top < top) window.scrollBy(0, rect.top - top);
+  if (rect.bottom > bottom) glideBy(Math.min(rect.bottom - bottom, rect.top - top));
+  else if (rect.top < top) glideBy(rect.top - top);
 }
 
 grid.addEventListener('click', event => {
@@ -480,8 +490,8 @@ async function importPhoto(file) {
 // frames sit right under the preview. Nothing moves if the page is already further down.
 function showFrames() {
   if (!pinnedPhone.matches) return;
-  const top = $('editor').getBoundingClientRect().top + window.scrollY;
-  if (window.scrollY < top) window.scrollTo(0, top);
+  const top = $('editor').getBoundingClientRect().top;
+  if (top > 0) glideBy(top);
 }
 
 // Android phones, and WeChat or QQ there, open the photo album only for a plain
@@ -1010,6 +1020,14 @@ $('caption-date').addEventListener('input', event => {
 // row of frame cards above the bottom bar, also on small screens and with large text.
 // Wider screens: the photo column stays in view beside the frames when it fits.
 let layoutFrame = 0;
+// The sample photo is 960 x 720: before it arrives the box already has its size.
+const sampleShape = 4 / 3;
+let steadyWidth = 0;
+let steadyHeight = 0;
+let stageFor;
+let stageWidth = 0;
+let stageRem = 0;
+let stageView = 0;
 const framesPanel = document.querySelector('.frames-panel');
 const photoPanel = document.querySelector('.photo-panel');
 
@@ -1021,36 +1039,62 @@ function scheduleLayout() {
   });
 }
 
+// The window gets taller when a phone's address bar slides away and shorter when the
+// keyboard opens. Neither should resize or unpin the preview, so the layout follows
+// the window's height only when the phone is turned (a new width) or the window
+// really changes size (split screen), not while someone is typing.
+function steadyViewHeight() {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const field = document.activeElement;
+  const typing = field && field.tagName === 'INPUT' && field.type === 'text';
+  if (!steadyHeight || width !== steadyWidth || (!typing && Math.abs(height - steadyHeight) > steadyHeight * .3)) {
+    steadyWidth = width;
+    steadyHeight = height;
+  }
+  return steadyHeight;
+}
+
 function layoutPage() {
   const root = document.documentElement;
   const rem = parseFloat(getComputedStyle(root).fontSize) || 16;
+  const view = steadyViewHeight();
+  root.classList.toggle('short-phone', phoneLayout.matches && view <= 34 * rem);
   const bar = $('bar');
   root.style.setProperty('--bar-h', `${phoneLayout.matches ? bar.offsetHeight : 0}px`);
-  const shape = image ? preview.width / preview.height : 1.38;
-  if (!pinnedPhone.matches) {
+  // The box takes the photo's shape, not the frame's, so trying frames never resizes it.
+  const shape = image && image.width && image.height ? image.width / image.height : sampleShape;
+  const style = getComputedStyle(stage);
+  const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+  const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+  // Panoramas and long screenshots get a shorter box instead of empty space.
+  const natural = (stage.clientWidth - padX) / shape + padY;
+  if (!pinnedPhone.matches) stageWidth = 0;
+  if (!phoneLayout.matches) {
     stage.style.height = '';
-    if (phoneLayout.matches) {
-      // Short or zoomed phones: the box is never taller than the photo needs.
-      const style = getComputedStyle(stage);
-      const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-      const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-      const natural = (stage.clientWidth - padX) / shape + padY;
-      if (natural < stage.offsetHeight) stage.style.height = `${Math.round(Math.max(7 * rem, natural))}px`;
-    }
+  } else if (!pinnedPhone.matches) {
+    // Short or zoomed phones: the box scrolls with the page and is never taller than the photo needs.
+    stage.style.height = `${Math.round(Math.max(7 * rem, Math.min(natural, view * .6)))}px`;
   } else {
     const dock = $('dock');
-    const style = getComputedStyle(stage);
-    const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-    const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
     const card = grid.firstElementChild;
     const panelTop = framesPanel.getBoundingClientRect().top;
     const reserve = card ? card.getBoundingClientRect().bottom - panelTop : 15 * rem;
     const chrome = dock.offsetHeight - stage.offsetHeight;
-    const room = window.innerHeight - bar.offsetHeight - chrome - reserve - .5 * rem;
-    // Panoramas and long screenshots get a shorter box instead of empty space.
-    const natural = (stage.clientWidth - padX) / shape + padY;
-    const height = Math.max(7 * rem, Math.min(room, natural, window.innerHeight * .5));
-    stage.style.height = `${Math.round(height)}px`;
+    const room = view - bar.offsetHeight - chrome - reserve - .5 * rem;
+    const height = Math.round(Math.max(7 * rem, Math.min(room, natural, view * .5)));
+    // The box is sized again only for a new photo, a turned phone or another text size.
+    // Otherwise it may only get smaller, when that is what keeps a row of frames in sight:
+    // picking frames, categories or saving never makes it grow and shrink.
+    const current = parseFloat(stage.style.height) || 0;
+    const fresh = stageFor !== image || stageWidth !== window.innerWidth || stageView !== view || stageRem !== rem;
+    if (fresh || !current || height < current - 1) {
+      stage.style.height = `${height}px`;
+      stageFor = image;
+      stageWidth = window.innerWidth;
+      stageView = view;
+      stageRem = rem;
+    }
     root.style.setProperty('--dock-h', `${dock.offsetHeight}px`);
   }
   // Keep the photo beside the frames on tablets and computers, if the whole column fits.
@@ -1059,12 +1103,14 @@ function layoutPage() {
 }
 
 window.addEventListener('resize', scheduleLayout);
+// iPhone Safari shows the pressed look of buttons (:active) only when the page listens to touches.
+document.addEventListener('touchstart', () => {}, {passive: true});
 // Safari before 14 and old Android browsers only know addListener.
 function onMediaChange(query, run) {
   if (query.addEventListener) query.addEventListener('change', run);
   else if (query.addListener) query.addListener(run);
 }
-for (const query of [phoneLayout, pinnedPhone, twoColumns]) onMediaChange(query, scheduleLayout);
+for (const query of [phoneLayout, twoColumns]) onMediaChange(query, scheduleLayout);
 // Turning a tablet can switch between one-tap and two-tap saving.
 for (const query of [phoneLayout, coarsePointer]) onMediaChange(query, updateBar);
 if ('ResizeObserver' in window) {

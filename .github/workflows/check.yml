@@ -45,6 +45,9 @@ jobs:
         run: node tools/ux.mjs
         env:
           SHOT_DIR: screenshots/ux
+      - name: Steadiness (nothing jumps, grows or bounces; calm motion)
+        if: always()
+        run: node tools/steady.mjs
       - name: Keep the screenshots for review
         if: always()
         uses: actions/upload-artifact@v7
@@ -72,6 +75,11 @@ jobs:
         run: node tools/webkit.mjs
         env:
           SHOT_DIR: screenshots
+      - name: Steadiness in WebKit
+        if: always()
+        run: node tools/steady.mjs
+        env:
+          ENGINE: webkit
       - name: Keep the screenshots for review
         if: always()
         uses: actions/upload-artifact@v7
