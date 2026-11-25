@@ -34,7 +34,13 @@ try {
   const shots = process.env.SHOT_DIR;
   if (shots) await mkdir(shots, {recursive: true});
   // The preview redraws on the next animation frame, so wait for it rather than read at once.
-  const waitFor = (page, check, arg) => page.waitForFunction(check, arg, {timeout: 3000}).then(() => true, () => false);
+  const waitFor = async (page, check, arg) => {
+    for (let tries = 0; tries < 30; tries++) {
+      if (await page.evaluate(check, arg)) return true;
+      await page.waitForTimeout(100);
+    }
+    return false;
+  };
   const shoot = async (page, name) => shots && page.screenshot({path: join(shots, `${name}.png`)});
   for (const viewport of [{width: 1280, height: 900}, {width: 390, height: 844}, {width: 360, height: 780}]) {
     const phone = viewport.width < 700;
