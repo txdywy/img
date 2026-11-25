@@ -1,7 +1,7 @@
-import {frames, categories, byId} from './frames.js?v=9';
-import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=9';
-import {setupAnalytics, track} from './analytics.js?v=9';
-import {openDialog} from './dialog.js?v=9';
+import {frames, categories, byId} from './frames.js?v=10';
+import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=10';
+import {setupAnalytics, track} from './analytics.js?v=10';
+import {openDialog} from './dialog.js?v=10';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
