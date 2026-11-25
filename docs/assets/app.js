@@ -259,8 +259,9 @@ filters.addEventListener('click', event => {
 
 grid.addEventListener('click', event => {
   const button = event.target.closest('button[data-frame]');
-  if (!button) return;
+  if (!button || button.dataset.frame === selected.id) return;
   selected = byId.get(button.dataset.frame);
+  markEdited();
   updateFrameSelection();
   syncCaption();
   syncOptions();
@@ -481,7 +482,13 @@ function applyAdjustment(next) {
   redrawAdjustment();
 }
 
+// Any change to the user's photo after saving it needs saving again.
+function markEdited() {
+  if (isUserPhoto) unsaved = true;
+}
+
 function redrawAdjustment() {
+  markEdited();
   syncOptions();
   requestPreview();
   refreshGalleryPreviews();
@@ -764,6 +771,7 @@ function syncCaption() {
 }
 
 function captionChanged() {
+  markEdited();
   syncOptions();
   requestPreview();
   refreshGalleryPreviews(selected.caption);
