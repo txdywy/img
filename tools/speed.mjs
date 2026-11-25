@@ -62,7 +62,9 @@ function serve() {
     resolve({url: `https://localhost:${server.address().port}/`, close: () => server.close()})));
 }
 
-const link = {offline: false, latency: 230, downloadThroughput: 4e6 / 8, uploadThroughput: 1e6 / 8};
+// A slow and a typical cross-border mobile link, both at ~230 ms per round trip.
+const links = [4, 20].map(mbit => ({offline: false, latency: 230, downloadThroughput: mbit * 1e6 / 8, uploadThroughput: 1e6 / 8}));
+let link = links[0];
 const runs = 5;
 const server = await serve();
 // Accept the test certificate: the launch flag covers the page and the service
@@ -127,13 +129,15 @@ async function measure(run) {
 }
 
 try {
-  const rows = [
-    ['first visit, before (no script preloads)', await measure(() => firstVisit(true))],
-    ['first visit, now', await measure(() => firstVisit(false))],
-    ['second visit, from the saved copy', await measure(secondVisit)],
-  ];
-  console.log(`${link.latency} ms round trip, ${link.downloadThroughput * 8 / 1e6} Mbit/s, median of ${runs}:`);
-  for (const [name, [ready, photo]] of rows) console.log(`  ${name}: buttons work at ${ready} ms, photo shows at ${photo} ms`);
+  for (link of links) {
+    const rows = [
+      ['first visit, before (no script preloads)', await measure(() => firstVisit(true))],
+      ['first visit, now', await measure(() => firstVisit(false))],
+      ['second visit, from the saved copy', await measure(secondVisit)],
+    ];
+    console.log(`${link.latency} ms round trip, ${link.downloadThroughput * 8 / 1e6} Mbit/s, median of ${runs}:`);
+    for (const [name, [ready, photo]] of rows) console.log(`  ${name}: buttons work at ${ready} ms, photo shows at ${photo} ms`);
+  }
 } finally {
   await browser.close();
   server.close();
