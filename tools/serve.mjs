@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 
 export const docs = join(dirname(fileURLToPath(import.meta.url)), '..', 'docs');
 const types = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
-  '.svg': 'image/svg+xml', '.webp': 'image/webp'};
+  '.svg': 'image/svg+xml', '.webp': 'image/webp', '.jpg': 'image/jpeg'};
 
 export async function serve() {
   const server = createServer(async (request, response) => {

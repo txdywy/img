@@ -19,10 +19,12 @@ jobs:
           node-version: 22
       - name: Asset versions and script syntax
         run: node tools/check-assets.mjs
-      - name: Install Playwright for the smoke test
+      - name: Install Playwright and the syntax checker
         run: |
-          npm install --no-save --no-package-lock playwright@1.49.1
-          npx playwright install --with-deps chromium
+          npm install --no-save --no-package-lock playwright@1.49.1 acorn@8.14.0
+          npx playwright install --with-deps chromium webkit
+      - name: Syntax older phones understand (iOS 12, older Android browsers)
+        run: node tools/old-syntax.mjs
       - name: Browser smoke test
         run: node tools/smoke.mjs
         env:
@@ -32,6 +34,11 @@ jobs:
         run: node tools/ux.mjs
         env:
           SHOT_DIR: screenshots/ux
+      - name: iPhone and iPad engine (WebKit)
+        if: always()
+        run: node tools/webkit.mjs
+        env:
+          SHOT_DIR: screenshots/webkit
       - name: Keep the screenshots for review
         if: always()
         uses: actions/upload-artifact@v4

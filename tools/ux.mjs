@@ -21,9 +21,15 @@ const errors = [];
 const notes = [];
 const festival = ['longevity', 'red', 'lantern', 'moon', 'lantern-blue', 'birthday', 'double-happiness', 'silk'];
 
+// iPadOS says it is a Mac; app.js tells it apart by its touch points.
+const ipadUA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15';
+const androidTabletUA = 'Mozilla/5.0 (Linux; Android 12; HUAWEI MatePad) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36';
+const iphoneUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1';
 const phones = [
   {name: '320x568', viewport: {width: 320, height: 568}},
-  {name: '360x780', viewport: {width: 360, height: 780}},
+  // An older Android phone: its browser must open the photo album, not a file manager.
+  {name: '360x780-android8', viewport: {width: 360, height: 780}, android: true,
+    userAgent: 'Mozilla/5.0 (Linux; Android 8.1.0; vivo Y83A) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.110 Mobile Safari/537.36'},
   {name: '375x667-se', viewport: {width: 375, height: 667}},
   {name: '390x844', viewport: {width: 390, height: 844}},
   {name: '390x844-text150', viewport: {width: 390, height: 844}, font: 24},
@@ -33,8 +39,11 @@ const phones = [
   {name: '390x844-zoom200', viewport: {width: 195, height: 422}, scale: 4, tiny: true},
 ];
 const wide = [
-  {name: 'ipad-768x1024', viewport: {width: 768, height: 1024}, touch: true},
+  {name: 'ipad-768x1024', viewport: {width: 768, height: 1024}, touch: true, userAgent: ipadUA},
+  {name: 'ipad-1024x768-landscape', viewport: {width: 1024, height: 768}, touch: true, userAgent: ipadUA},
   {name: 'tablet-820x1180', viewport: {width: 820, height: 1180}, touch: true},
+  {name: 'android-tablet-800x1280', viewport: {width: 800, height: 1280}, touch: true, userAgent: androidTabletUA},
+  {name: 'android-tablet-1280x800-landscape', viewport: {width: 1280, height: 800}, touch: true, userAgent: androidTabletUA},
   {name: 'desktop-1280x800', viewport: {width: 1280, height: 800}},
   {name: 'desktop-1440x900', viewport: {width: 1440, height: 900}},
 ];
@@ -53,6 +62,9 @@ async function open(setup) {
     // Like the phone's own "large text" setting: changes rem and rem-based media queries.
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Page.setFontSizes', {fontSizes: {standard: setup.font, fixed: Math.round(setup.font * .8)}});
+  }
+  if (setup.userAgent && /Macintosh/.test(setup.userAgent)) {
+    await page.addInitScript(() => Object.defineProperty(Navigator.prototype, 'maxTouchPoints', {get: () => 5}));
   }
   await page.goto(server.url);
   await page.locator('#preview').waitFor({state: 'visible'});
@@ -114,7 +126,7 @@ function cardsInView() {
 
 async function importPhoto(page, file) {
   await page.setInputFiles('#file', file);
-  const ok = await waitFor(page, () => document.querySelector('#bar-main-text').textContent === '保存照片'
+  const ok = await waitFor(page, () => ['保存照片', '做好照片'].includes(document.querySelector('#bar-main-text').textContent)
     && !document.querySelector('#save').disabled && !document.querySelector('#bar-main').disabled);
   await settle(page);
   return ok;
@@ -149,6 +161,13 @@ async function phoneFlow(setup, photos) {
   const page = await open({...setup, phone: true});
   // Before a photo: no adjust or enlarge for the sample, one clear button.
   if (await page.locator('#dock-tools').isVisible()) errors.push(`${at}: adjust/enlarge show before a photo is chosen`);
+  // Review 5: people who treasure an old photo read that it stays untouched before they tap.
+  const reassure = await page.locator('#bar-hint').innerText();
+  if (!reassure.includes('原照片还在')) errors.push(`${at}: the bar does not say the original photo stays (${reassure})`);
+  if (setup.android) {
+    const accept = await page.locator('#file').getAttribute('accept');
+    if (accept !== 'image/*') errors.push(`${at}: Android photo picker asks for ${accept}, which opens a file manager on many phones`);
+  }
   await shoot(page, setup, '1-start');
   if (!(await importPhoto(page, photos.landscape))) errors.push(`${at}: the photo did not open`);
 
@@ -211,6 +230,48 @@ async function phoneFlow(setup, photos) {
   await shoot(page, setup, '4-words');
   await page.keyboard.press('Escape');
   if (!(await waitFor(page, () => !document.querySelector('#words').open))) errors.push(`${at}: Esc did not close the words sheet`);
+  // Review 2: the blessing someone typed stays when they try the 生日快乐 frame, and comes back with the first one.
+  const birthday = page.locator('#frames button[data-frame="birthday"]');
+  await birthday.scrollIntoViewIfNeeded();
+  await birthday.click();
+  await settle(page);
+  let words = await page.locator('#caption-text').inputValue();
+  if (words !== '身体健康') errors.push(`${at}: switching to 生日快乐 replaced the typed blessing with ${JSON.stringify(words)}`);
+  const first = page.locator('#frames button[data-frame="longevity"]');
+  await first.scrollIntoViewIfNeeded();
+  await first.click();
+  await settle(page);
+  words = await page.locator('#caption-text').inputValue();
+  if (words !== '身体健康') errors.push(`${at}: back on the first frame the blessing is ${JSON.stringify(words)}`);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await settle(page);
+
+  // Review 3: 看大图 shows the photo bigger than the page does, can zoom in, and has a way back in sight.
+  if (!setup.tiny) {
+    const small = await page.evaluate(() => document.querySelector('#preview').getBoundingClientRect().width);
+    await page.locator('#dock-view').click();
+    await page.locator('#frame-dialog').waitFor({state: 'visible'});
+    await settle(page);
+    const big = await page.evaluate(() => document.querySelector('#frame-preview').getBoundingClientRect().width);
+    if (big < small || big < setup.viewport.width * .9) errors.push(`${at}: 看大图 is ${Math.round(big)}px wide, the page preview ${Math.round(small)}px, screen ${setup.viewport.width}px`);
+    const back = await page.locator('#frame-dialog form .button').boundingBox();
+    if (!back || back.y < 0 || back.y + back.height > setup.viewport.height + 1) errors.push(`${at}: 返回挑相框 is off screen in 看大图`);
+    await shoot(page, setup, '4b-big');
+    await page.locator('#zoom-toggle').click();
+    await settle(page);
+    const zoom = await page.evaluate(() => {
+      const view = document.querySelector('#zoom-view');
+      return {canvas: document.querySelector('#frame-preview').getBoundingClientRect().width, scrolls: view.scrollWidth > view.clientWidth};
+    });
+    if (zoom.canvas < big * 1.5 || !zoom.scrolls) errors.push(`${at}: 放大看清楚 does not zoom in (${JSON.stringify(zoom)})`);
+    await shoot(page, setup, '4c-zoomed');
+    await page.locator('#frame-preview').click({position: {x: 30, y: 30}});
+    await settle(page);
+    if (await page.evaluate(() => document.querySelector('#zoom-view').classList.contains('zoomed'))) errors.push(`${at}: a tap on the zoomed photo does not go back to the whole photo`);
+    await page.goBack();
+    if (!(await waitFor(page, () => !document.querySelector('#frame-dialog').open))) errors.push(`${at}: Back did not close 看大图`);
+    await settle(page);
+  }
 
   // 4. Adjust sheet: simple choices, a clear crop warning, 调好了 in sight, Back closes it.
   await page.locator('#filters button[data-category="all"]').click();
@@ -264,6 +325,8 @@ async function phoneFlow(setup, photos) {
   }
   const lead = await page.locator('#result-lead').innerText();
   if (!lead.includes('已存到')) errors.push(`${at}: the result window does not say where the photo went (${lead})`);
+  const title = await page.locator('#result-title').innerText();
+  if (!title.includes('已保存')) errors.push(`${at}: after saving, the window title says ${title}`);
   await shoot(page, setup, '6-saved-window');
   // Back closes the result window too.
   await page.goBack();
@@ -350,15 +413,80 @@ async function wideFlow(setup, photos) {
   if (!(await page.evaluate(cardsInView)).some(id => festival.includes(id))) errors.push(`${at}: no 节庆 frame in view after tapping 节庆`);
   await page.locator('#save').click();
   await page.locator('#result-dialog').waitFor({state: 'visible'});
+  // Review 1: the window does not say the photo is done before it is saved.
+  let title = await page.locator('#result-title').innerText();
+  if (!title.includes('还差一步')) errors.push(`${at}: before saving, the window title says ${title}`);
   const download = page.waitForEvent('download');
   await page.locator('#result-download').click();
   await download;
+  title = await page.locator('#result-title').innerText();
+  if (!title.includes('已保存')) errors.push(`${at}: after saving, the window title says ${title}`);
   await page.locator('#result-close').click();
   await settle(page);
   const hint = await page.locator('#save-hint').innerText();
   if (!hint.includes('已保存')) errors.push(`${at}: no 已保存 note after saving (${hint})`);
   await shoot(page, setup, '2-saved');
   await commonChecks(page, at);
+  await page.close();
+}
+
+// iPhone (Chromium with an iPhone's name; tools/webkit.mjs runs the real engine in CI):
+// the first tap makes the photo and says one step is left, closing early leaves a
+// note, and the second tap saves.
+async function iPhoneFlow(setup, photos) {
+  const at = setup.name;
+  const page = await open({...setup, phone: true, userAgent: iphoneUA});
+  if (!(await importPhoto(page, photos.portrait))) errors.push(`${at}: the photo did not open`);
+  const label = await page.locator('#bar-main-text').innerText();
+  if (label !== '做好照片') errors.push(`${at}: the bar button promises ${label} though one more tap is needed`);
+  let downloaded = false;
+  page.on('download', () => { downloaded = true; });
+  await page.locator('#bar-main').click();
+  await page.locator('#result-dialog').waitFor({state: 'visible'});
+  await settle(page);
+  const title = await page.locator('#result-title').innerText();
+  if (!title.includes('还差一步')) errors.push(`${at}: the window says ${title} before anything is saved`);
+  if (downloaded) errors.push(`${at}: a download started without the second tap`);
+  for (const id of ['#result-download', '#result-close']) {
+    const box = await page.locator(id).boundingBox();
+    if (!box || box.y + box.height > setup.viewport.height + 1) errors.push(`${at}: ${id} is off screen in the result window`);
+  }
+  await shoot(page, setup, '1-made');
+  await page.locator('#result-close').click();
+  await settle(page);
+  const hint = await page.locator('#bar-hint').innerText();
+  if (!hint.includes('还没存好')) errors.push(`${at}: closing before saving leaves no note (${hint})`);
+  await shoot(page, setup, '2-not-saved');
+  await page.locator('#bar-main').click();
+  await page.locator('#result-dialog').waitFor({state: 'visible'});
+  const file = page.waitForEvent('download', {timeout: 8000}).catch(() => null);
+  await page.locator('#result-download').click();
+  if (!(await file)) errors.push(`${at}: 下载照片 did not download`);
+  const done = await page.locator('#result-title').innerText();
+  const lead = await page.locator('#result-lead').innerText();
+  if (!done.includes('已保存') || !lead.includes('文件')) errors.push(`${at}: after saving: ${done} / ${lead}`);
+  await shoot(page, setup, '3-saved');
+  await page.goBack();
+  await waitFor(page, () => !document.querySelector('#result-dialog').open);
+  if (!(await page.locator('#bar-hint').innerText()).includes('已保存')) errors.push(`${at}: no 已保存 note after saving`);
+  await commonChecks(page, at);
+  await page.close();
+}
+
+// A browser too old for the page's script gets a plain note, not dead buttons.
+async function oldBrowserFlow() {
+  const at = 'old-browser';
+  const page = await browser.newPage({viewport: {width: 360, height: 640}});
+  await page.route(/app\.js/, route => route.fulfill({contentType: 'text/javascript', body: 'const a = b?.c ?? 1_000; export {};'}));
+  // Stand in for a browser that cannot parse it: make the module fail outright.
+  await page.route(/frames\.js/, route => route.fulfill({status: 404}));
+  await page.goto(server.url);
+  const shown = await waitFor(page, () => {
+    const note = document.querySelector('#old-browser');
+    return note && !note.hidden && note.getBoundingClientRect().height > 0;
+  }, null, 60);
+  if (!shown) errors.push(`${at}: no note when the page cannot start`);
+  if (await page.locator('#bar-main').isVisible()) errors.push(`${at}: buttons that cannot work are still shown`);
   await page.close();
 }
 
@@ -379,7 +507,18 @@ async function weChatFlow(photos) {
   if (!shown) errors.push(`${at}: the finished photo does not show, so it cannot be long-pressed`);
   const lead = await page.locator('#result-lead').innerText();
   if (!lead.includes('按住')) errors.push(`${at}: no long-press tip (${lead})`);
+  if (!(await page.locator('#result-title').innerText()).includes('按住照片')) errors.push(`${at}: the title does not say to press and hold`);
+  // The long-press tip sits above the picture it points at.
+  const order = await page.evaluate(() => document.querySelector('#result-lead').getBoundingClientRect().top < document.querySelector('#result-image').getBoundingClientRect().top);
+  if (!order || !lead.includes('下面')) errors.push(`${at}: the tip and the picture are in the wrong order`);
+  const accept = await page.locator('#file').getAttribute('accept');
+  if (accept !== 'image/*') errors.push(`${at}: WeChat photo picker asks for ${accept}`);
   await shoot(page, setup, '1-result');
+  await page.locator('#result-close').click();
+  await settle(page);
+  // WeChat cannot tell the page whether the long press saved it, so the page claims neither.
+  const hint = await page.locator('#bar-hint').innerText();
+  if (hint.includes('已保存') || hint.includes('还没存好')) errors.push(`${at}: the bar guesses whether it was saved (${hint})`);
   await page.close();
 }
 
@@ -397,6 +536,19 @@ try {
     } catch (error) {
       errors.push(`${setup.name}: test stopped: ${String(error.message || error).split('\n')[0]}`);
     }
+  }
+  for (const setup of [{name: 'iphone-se-375x667', viewport: {width: 375, height: 667}},
+    {name: 'iphone-15-393x852', viewport: {width: 393, height: 852}, scale: 3}]) {
+    try {
+      await iPhoneFlow(setup, photos);
+    } catch (error) {
+      errors.push(`${setup.name}: test stopped: ${String(error.message || error).split('\n')[0]}`);
+    }
+  }
+  try {
+    await oldBrowserFlow();
+  } catch (error) {
+    errors.push(`old-browser: test stopped: ${String(error.message || error).split('\n')[0]}`);
   }
   try {
     await weChatFlow(photos);
