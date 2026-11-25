@@ -10,7 +10,7 @@
 // Prints the numbers; it fails only if the page does not load.
 // Needs the playwright package, a Chromium and openssl; set CHROMIUM_PATH to use another build.
 import {execFileSync} from 'node:child_process';
-import {mkdtempSync, readFileSync} from 'node:fs';
+import {mkdtempSync, readFileSync, rmSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import {createSecureServer} from 'node:http2';
 import {tmpdir} from 'node:os';
@@ -22,11 +22,24 @@ import {docs} from './serve.mjs';
 const types = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.jpg': 'image/jpeg'};
 
-function serve() {
+// Browsers speak HTTP/2 only over HTTPS, so make a certificate for localhost that
+// lives as long as this run. The browser below is told to accept it, and only it
+// matters here: the server listens on 127.0.0.1 alone.
+function certificate() {
   const dir = mkdtempSync(join(tmpdir(), 'speed-'));
-  execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=localhost',
-    '-keyout', join(dir, 'key.pem'), '-out', join(dir, 'cert.pem')], {stdio: 'ignore'});
-  const server = createSecureServer({key: readFileSync(join(dir, 'key.pem')), cert: readFileSync(join(dir, 'cert.pem')), allowHTTP1: true},
+  try {
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=localhost',
+      '-addext', 'subjectAltName=DNS:localhost', '-keyout', join(dir, 'key.pem'), '-out', join(dir, 'cert.pem')], {stdio: 'pipe'});
+    return {key: readFileSync(join(dir, 'key.pem')), cert: readFileSync(join(dir, 'cert.pem'))};
+  } catch (error) {
+    throw new Error(`speed.mjs needs openssl to make a test certificate: ${error.stderr || error.message}`);
+  } finally {
+    rmSync(dir, {recursive: true, force: true});
+  }
+}
+
+function serve() {
+  const server = createSecureServer({...certificate(), allowHTTP1: true},
     async (request, response) => {
       const path = normalize(decodeURIComponent(new URL(request.url, 'https://x').pathname)).replace(/^(\.\.[/\\])+/, '');
       try {
@@ -52,7 +65,9 @@ function serve() {
 const link = {offline: false, latency: 230, downloadThroughput: 4e6 / 8, uploadThroughput: 1e6 / 8};
 const runs = 5;
 const server = await serve();
-// Trust the throwaway certificate everywhere, the service worker included.
+// Accept the test certificate: the launch flag covers the page and the service
+// worker (which ignores the context option); ignoreHTTPSErrors covers Playwright's
+// own requests, like the page rewrite in firstVisit.
 const browser = await chromium.launch({executablePath: process.env.CHROMIUM_PATH || undefined,
   args: ['--ignore-certificate-errors', '--host-resolver-rules=MAP localhost 127.0.0.1']});
 
@@ -93,7 +108,7 @@ async function firstVisit(withoutPreloads) {
 }
 
 async function secondVisit() {
-  const context = await browser.newContext({viewport: {width: 390, height: 844}});
+  const context = await browser.newContext({ignoreHTTPSErrors: true, viewport: {width: 390, height: 844}});
   const page = await context.newPage();
   await page.goto(server.url);
   await page.evaluate(() => navigator.serviceWorker.ready);
