@@ -1,7 +1,7 @@
-import {frames, categories, byId} from './frames.js?v=15';
-import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=15';
-import {setupAnalytics, track} from './analytics.js?v=15';
-import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=15';
+import {frames, categories, byId} from './frames.js?v=16';
+import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=16';
+import {setupAnalytics, track} from './analytics.js?v=16';
+import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=16';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -65,6 +65,13 @@ let crop = null;
 let pan = null;
 let resultUrl = '';
 let resultFile = null;
+// On iPhone (iOS 15 and 16, WebKit bug 231995), choosing 存储图像 in the share
+// sheet saves the photo but the share never finishes, and every later share fails
+// until the page is reloaded; iOS 14 had a similar fault (bug 216913). So the
+// first photo saves and the second cannot. Once that happens the page stops
+// offering the share sheet and asks for a long press on the photo instead.
+let sharePending = false;
+let shareBroken = false;
 let dragDepth = 0;
 let unsaved = false;
 let savedNote = false;
@@ -172,11 +179,25 @@ function downscale(source, longest) {
   return canvas;
 }
 
+// iPhones cap the memory all canvases may use together, and a dropped canvas
+// keeps its share until the browser gets round to freeing it. A full-size photo
+// takes about 50 MB, so each new photo frees the old copies straight away.
+function release(source, keep) {
+  if (!source || keep.includes(source)) return;
+  if (source.close) source.close();
+  else if (typeof HTMLCanvasElement === 'function' && source instanceof HTMLCanvasElement) {
+    source.width = 1;
+    source.height = 1;
+  }
+}
+
 function setImage(photo) {
-  if (image && image !== photo && image.close) image.close();
+  const old = [image, previewSource, thumbSource];
   image = photo;
   previewSource = downscale(photo, previewEdge);
   thumbSource = downscale(previewSource, Math.max(tileWidth, tileHeight) * 2);
+  const keep = [image, previewSource, thumbSource];
+  for (const source of new Set(old)) release(source, keep);
 }
 
 function fitPreview() {
@@ -783,25 +804,41 @@ function exportName(frame) {
   return `拾光相框-${frame.name}-${date}-${++exportNumber}.jpg`;
 }
 
+// Saving by a long press on the photo: WeChat and similar apps always, and
+// iPhone Safari once its share sheet has stopped working.
+function holdToSave() {
+  return longPressSave || (isApple && shareBroken);
+}
+
+// What a long press offers is called differently on each phone and iOS version.
+function holdLead() {
+  return longPressSave
+    ? `${isWeChat ? '在微信里' : '在这里'}：用手指按住下面的照片不放，选「保存图片」，就存进相册了。也可以选「发送给朋友」。`
+    : '用手指按住下面的照片不放，选「存储到“照片”」或「存储图像」，就存进相册了。也可以点「下载到文件」。';
+}
+
 function showResult(opener) {
-  const canShare = Boolean(resultFile && navigator.canShare && navigator.canShare({files: [resultFile]}));
+  // A share that never finished means the next one would fail (see sharePending).
+  if (sharePending) shareBroken = true;
+  const hold = holdToSave();
+  const canShare = !shareBroken && Boolean(resultFile && navigator.canShare && navigator.canShare({files: [resultFile]}));
   // On iPhone and iPad, the share sheet is the direct way into Photos.
   const shareFirst = canShare && isApple && !longPressSave;
   share.hidden = !canShare;
   share.className = `button ${shareFirst ? 'primary' : 'secondary'}`;
-  download.className = `button ${shareFirst || longPressSave ? 'secondary' : 'primary'}`;
+  download.className = `button ${shareFirst || hold ? 'secondary' : 'primary'}`;
   $('share-text').textContent = shareFirst ? '保存到相册' : '发给家人或其他应用';
-  $('download-text').textContent = shareFirst ? '下载到文件' : '下载照片';
+  $('download-text').textContent = shareFirst || (hold && isApple) ? '下载到文件' : '下载照片';
+  $('share-status').textContent = '';
   const lead = $('result-lead');
   lead.classList.remove('saved');
   // Honest about the one step that is left: the photo is made, not yet saved.
-  $('result-title').textContent = longPressSave ? '还差一步：按住照片保存' : '还差一步：把照片存好';
-  lead.textContent = longPressSave
-    ? `${isWeChat ? '在微信里' : '在这里'}：用手指按住下面的照片不放，选「保存图片」，就存进相册了。也可以选「发送给朋友」。`
+  $('result-title').textContent = hold ? '还差一步：按住照片保存' : '还差一步：把照片存好';
+  lead.textContent = hold ? holdLead()
     : shareFirst ? '点下面的「保存到相册」，在弹出的菜单里选「存储图像」。'
     : '点下面的「下载照片」，存到这台设备。';
-  // In WeChat nothing tells the page whether the photo was saved, so it never claims either.
-  madeNotSaved = !longPressSave;
+  // After a long press nothing tells the page whether the photo was saved, so it never claims either.
+  madeNotSaved = !hold;
   $('result-close').textContent = madeNotSaved ? '先不存，返回' : '返回挑相框';
   download.after(share);
   if (shareFirst) download.before(share);
@@ -854,7 +891,8 @@ async function exportPhoto(opener) {
     clearResult();
     resultUrl = URL.createObjectURL(blob);
     // WeChat's long-press menu cannot save a blob: picture, so give it the image data itself.
-    $('result-image').src = longPressSave ? await dataUrl(blob) : resultUrl;
+    if (sharePending) shareBroken = true;
+    $('result-image').src = holdToSave() ? await dataUrl(blob) : resultUrl;
     if (version !== importVersion) return;
     download.href = resultUrl;
     const filename = exportName(frame);
@@ -882,10 +920,40 @@ download.addEventListener('click', () => {
   track('photo_download_clicked');
 });
 
+// The share sheet stopped working (see sharePending): switch this window to a
+// long press on the photo, and say that the last 存储图像 most likely worked.
+async function shareStuck() {
+  shareBroken = true;
+  share.hidden = true;
+  madeNotSaved = false;
+  $('result-close').textContent = '返回挑相框';
+  const file = resultFile;
+  $('share-status').textContent = '';
+  $('result-title').textContent = '换个方法：按住照片保存';
+  $('result-lead').textContent = `${sharePending ? '刚才如果选了「存储图像」，那张已经存进相册了。' : ''}${holdLead()}`;
+  $('result-lead').classList.remove('saved');
+  download.className = 'button primary';
+  $('download-text').textContent = '下载到文件';
+  updateSave();
+  track('photo_share_stuck');
+  try {
+    const data = await dataUrl(file);
+    if (file === resultFile) $('result-image').src = data;
+  } catch {
+    // The blob: picture stays; Safari can usually save that too.
+  }
+}
+
 share.addEventListener('click', async () => {
   const message = $('share-status');
+  if (isApple && sharePending) {
+    void shareStuck();
+    return;
+  }
+  sharePending = true;
   try {
     await navigator.share({files: [resultFile]});
+    sharePending = false;
     message.textContent = '';
     if (isApple) markSaved('如果选了「存储图像」，照片就在相册里了。', '✓ 好了');
     else {
@@ -895,8 +963,15 @@ share.addEventListener('click', async () => {
     }
     track('photo_share_completed');
   } catch (error) {
-    if (error.name === 'AbortError') return;
-    message.textContent = '无法打开分享菜单。请试试下载或长按照片。';
+    sharePending = false;
+    if (error && error.name === 'AbortError') return;
+    if (isApple) {
+      void shareStuck();
+      return;
+    }
+    shareBroken = true;
+    share.hidden = true;
+    message.textContent = '无法打开分享菜单。请点「下载照片」，或按住照片保存。';
   }
 });
 
