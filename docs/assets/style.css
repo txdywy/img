@@ -193,10 +193,11 @@ details[open] .chevron, [aria-expanded="true"] .chevron { transform: rotate(225d
 /* Six categories in two even rows of three, on every screen. */
 .filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap); margin-bottom: .9rem; }
 .filter {
-  flex: 1 1 auto; padding: .35rem .5rem; min-height: var(--tap); min-width: 48px; font-size: 1.125rem; white-space: nowrap;
+  flex: 1 1 auto; padding: .35rem .5rem; min-height: var(--tap); min-width: 48px; font-size: 1.125rem; line-height: 1.25;
   background: var(--panel); border: 1px solid var(--edge); color: var(--ink); border-radius: .55rem;
 }
 .filter:hover { background: var(--rose-light); }
+.filter .name, .filter .count { display: inline-block; white-space: nowrap; }
 .filter .count { font-size: .85em; font-weight: 400; color: var(--soft); }
 .filter[aria-pressed="true"] { color: #782538; background: var(--rose-light); border: 2px solid var(--rose); font-weight: 750; padding: calc(.35rem - 1px) calc(.5rem - 1px); }
 .filter[aria-pressed="true"] .count { color: inherit; }
@@ -442,10 +443,12 @@ dialog::backdrop { background: #32231995; }
   .bar-hint.error { color: #8d2839; font-weight: 700; }
   .bar-hint.saved { color: var(--ok); font-weight: 700; }
   .bar-hint.pending { color: #8a4b00; font-weight: 700; }
-  .bar-actions { display: flex; gap: .6rem; }
+  /* When both buttons do not fit side by side (very large text on a narrow phone),
+     the main one moves under 换照片 and both take the whole width, never cut off. */
+  .bar-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
   .bar-actions .button { min-height: 3.5rem; font-size: 1.25rem; white-space: nowrap; overflow-wrap: normal; }
-  #bar-pick { flex: 0 0 auto; padding-inline: 1rem; }
-  #bar-main { flex: 1 1 auto; }
+  #bar-pick { flex: 1 0 auto; padding-inline: 1rem; }
+  #bar-main { flex: 1000 1 auto; }
   .bar .button:disabled { opacity: .7; }
   .footer { padding-bottom: .5rem; }
 
@@ -471,6 +474,24 @@ dialog::backdrop { background: #32231995; }
   .filter[aria-pressed="true"] { padding-inline: calc(.2rem - 1px); }
   .sheet summary, .dock-tools .dock-view { padding-inline: .5rem; font-size: 1rem; }
   .dock-tools .icon { display: none; }
+}
+/* Very large text on a narrow phone (200% text on a 375px phone is under 12rem):
+   the save window takes the whole screen with full-width buttons, so no word is cut
+   off or broken letter by letter. */
+@media (max-width: 12rem) {
+  #result-dialog { width: 100%; max-width: 100%; height: 100%; max-height: 100%; margin: 0; border: 0; border-radius: 0; }
+  #result-dialog .dialog-inner { padding: .75rem; }
+  #result-dialog h2 { font-size: 1.15rem; }
+  #result-image { max-height: 30vh; margin-block: .5rem; }
+  #result-dialog .result-foot { margin: 0 -.75rem -.75rem; padding: .5rem .75rem .75rem; }
+  #result-dialog .result-actions { flex-direction: column; }
+  #result-dialog .result-actions form { width: 100%; }
+  #result-dialog .result-actions .button { width: 100%; padding-inline: .5rem; font-size: 1rem; white-space: nowrap; overflow-wrap: normal; }
+  #result-dialog .result-actions .icon { display: none; }
+}
+/* Narrower still (200% text on a 320px phone): categories in two columns. */
+@media (max-width: 10.5rem) {
+  .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 /* Too short to pin the preview (a phone on its side): let it scroll with the page.
    app.js decides (class short-phone) from the window's height, ignoring the keyboard
