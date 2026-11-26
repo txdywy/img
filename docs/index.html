@@ -20,10 +20,10 @@
   <meta itemprop="image" content="https://img.hackx64.eu.org/assets/share.jpg">
   <meta name="format-detection" content="telephone=no">
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./assets/style.css?v=16">
+  <link rel="stylesheet" href="./assets/style.css?v=17">
   <link rel="preload" as="image" href="./assets/example.webp" type="image/webp">
-  <script type="module" src="./assets/app.js?v=16"></script>
-  <script src="./assets/old.js?v=16" defer></script>
+  <script type="module" src="./assets/app.js?v=17"></script>
+  <script src="./assets/old.js?v=17" defer></script>
 </head>
 <body>
   <svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -109,7 +109,6 @@
                   </div>
                   <div class="adjust-actions">
                     <button type="button" class="button secondary" id="rotate">转一下</button>
-                    <button type="button" class="button secondary" id="undo" disabled>撤销</button>
                     <button type="button" class="button secondary" id="reset">恢复原样</button>
                   </div>
                   <div class="sheet-done"><button type="button" class="button primary" data-close-sheet>调好了</button></div>
@@ -122,7 +121,10 @@
                   <label class="check"><input type="checkbox" id="caption-on" checked> <span id="caption-on-text">加一句祝福</span></label>
                   <div class="caption-fields" id="caption-fields">
                     <label for="caption-text" id="caption-text-label">祝福语</label>
-                    <input id="caption-text" type="text" maxlength="16" autocomplete="off" enterkeyhint="done">
+                    <div class="caption-input">
+                      <input id="caption-text" type="text" maxlength="16" autocomplete="off" enterkeyhint="done">
+                      <button type="button" class="button secondary" id="caption-clear" aria-label="清空祝福语，重新写">清空</button>
+                    </div>
                     <div class="caption-row" id="caption-date-row" hidden>
                       <label for="caption-date">日期</label>
                       <input id="caption-date" type="text" maxlength="16" autocomplete="off" enterkeyhint="done">
@@ -182,7 +184,7 @@
       <ol>
         <li>先从相册或文件里选一张自己的照片。电脑上也可以把照片拖进页面，或复制后按 Ctrl+V 粘贴。</li>
         <li>点喜欢的相框，上面的预览马上换好。点上面的分类（节庆、花卉等）可以只看这一类。想改形状或转方向，点「调整」；不调也可以。</li>
-        <li>点「保存照片」。安卓手机会直接存进「下载」；iPhone 和 iPad 上再点「保存到相册」；电脑上是「做好这张照片」，再点「下载照片」。存好后底部会显示「已保存」。</li>
+        <li id="help-save">满意了就点「做好照片」，再按提示存好。存好后会显示「已保存」。</li>
       </ol>
       <p>照片处理都在这台设备上完成。遇到打不开的照片，可以在相册里另存为 JPG 或 PNG，再选一次。</p>
       <form method="dialog"><button class="button primary">我知道了</button></form>
@@ -226,18 +228,19 @@
       <h2 id="result-title">还差一步：把照片存好</h2>
       <p id="result-lead" class="result-lead" aria-live="polite">点下面的「下载照片」，存到这台设备。</p>
       <img id="result-image" alt="加好相框的成品照片">
-      <div class="result-actions">
-        <a class="button primary" id="result-download" download><svg class="icon"><use href="#i-save"/></svg> <span id="download-text">下载照片</span></a>
-        <button class="button secondary" id="share" type="button" hidden><svg class="icon"><use href="#i-photo"/></svg> <span id="share-text">保存到相册</span></button>
-      </div>
-      <p class="status" id="share-status" role="status"></p>
-      <details>
-        <summary>找不到照片？</summary>
-        <p>下载后，请到浏览器的「下载」列表或设备的「下载」文件夹找这张照片。iPhone 上也可以在「文件」里找「下载项」。</p>
-        <p>想存进相册时，可以打开下载的图片，再从系统菜单选择「存储图像」或类似选项。手机浏览器如果支持，也可以长按上面的成品，选择保存图片。</p>
-        <p>如果微信里无法下载，可用右上角菜单在浏览器打开。请在离开前尝试保存，在新浏览器中需重新选图套框。</p>
+      <details class="result-help" id="result-help">
+        <summary id="result-help-title">找不到照片？</summary>
+        <p id="result-help-text"></p>
       </details>
-      <form method="dialog"><button class="button secondary" id="result-close">返回</button></form>
+      <!-- The buttons stay at the bottom of the window, in sight however big the text. -->
+      <div class="result-foot">
+        <p class="status" id="share-status" role="status"></p>
+        <div class="result-actions">
+          <a class="button primary" id="result-download" download><svg class="icon"><use href="#i-save"/></svg> <span id="download-text">下载照片</span></a>
+          <button class="button secondary" id="share" type="button" hidden><svg class="icon"><use href="#i-photo"/></svg> <span id="share-text">保存到相册</span></button>
+          <form method="dialog"><button class="button secondary" id="result-close">返回</button></form>
+        </div>
+      </div>
     </div>
   </dialog>
 </body>

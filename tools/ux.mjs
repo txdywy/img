@@ -223,6 +223,13 @@ async function phoneFlow(setup, photos) {
     }).map(el => el.textContent.trim()));
   if (wrapped.length) errors.push(`${at}: bottom bar text wraps: ${wrapped.join(', ')}`);
 
+  // The bar's hint stays on one line, also with large text, so it never pushes the buttons up.
+  const hintLines = () => page.evaluate(() => {
+    const hint = document.querySelector('#bar-hint');
+    return Math.round(hint.getBoundingClientRect().height / (parseFloat(getComputedStyle(hint).lineHeight) || 22));
+  });
+  if (!setup.tiny && await hintLines() > 1) errors.push(`${at}: the bar hint wraps (${await page.locator('#bar-hint').innerText()})`);
+
   // 2. Tapping 节庆 shows 节庆 frames, and the words box stays out of the way.
   await page.locator('#filters button[data-category="festival"]').click();
   await settle(page);
@@ -235,7 +242,15 @@ async function phoneFlow(setup, photos) {
   // Words sheet: its button stays in sight; Esc closes it.
   await page.locator('#words summary').click();
   await page.locator('#caption-text').waitFor({state: 'visible'});
+  // The words come filled in: 清空 empties them in one tap and leaves the cursor there.
+  await page.locator('#caption-clear').click();
+  const cleared = await page.evaluate(() => ({value: document.querySelector('#caption-text').value,
+    focused: document.activeElement && document.activeElement.id, disabled: document.querySelector('#caption-clear').disabled}));
+  if (cleared.value || cleared.focused !== 'caption-text' || !cleared.disabled) errors.push(`${at}: 清空 did not empty the words (${JSON.stringify(cleared)})`);
   await page.locator('#caption-text').fill('身体健康');
+  // The keyboard's 完成 key (Enter) puts the keyboard away.
+  await page.locator('#caption-text').press('Enter');
+  if (await page.evaluate(() => document.activeElement && document.activeElement.id === 'caption-text')) errors.push(`${at}: 完成 on the keyboard leaves the keyboard up`);
   const wordsDone = await page.locator('#words [data-close-sheet]').boundingBox();
   if (!wordsDone || wordsDone.y < 0 || wordsDone.y + wordsDone.height > setup.viewport.height + 1) {
     errors.push(`${at}: 写好了 is off screen in the words sheet`);
@@ -283,6 +298,10 @@ async function phoneFlow(setup, photos) {
     if (await page.evaluate(() => document.querySelector('#zoom-view').classList.contains('zoomed'))) errors.push(`${at}: a tap on the zoomed photo does not go back to the whole photo`);
     await page.goBack();
     if (!(await waitFor(page, () => !document.querySelector('#frame-dialog').open))) errors.push(`${at}: Back did not close 看大图`);
+    // The enlarged picture is let go on closing; iPhones cap the memory of all pictures together.
+    await waitFor(page, () => document.querySelector('#frame-preview').width === 1);
+    const kept = await page.evaluate(() => document.querySelector('#frame-preview').width * document.querySelector('#frame-preview').height);
+    if (kept > 1) errors.push(`${at}: 看大图 keeps a ${kept}-pixel picture after closing`);
     await settle(page);
   }
 
@@ -337,9 +356,18 @@ async function phoneFlow(setup, photos) {
     if (bytes.length < 10_000 || bytes[0] !== 0xff || bytes[1] !== 0xd8) errors.push(`${at}: download is not a JPG`);
   }
   const lead = await page.locator('#result-lead').innerText();
-  if (!lead.includes('已存到')) errors.push(`${at}: the result window does not say where the photo went (${lead})`);
+  if (!lead.includes('已存进')) errors.push(`${at}: the result window does not say where the photo went (${lead})`);
   const title = await page.locator('#result-title').innerText();
   if (!title.includes('已保存')) errors.push(`${at}: after saving, the window title says ${title}`);
+  // Saved: 返回挑相框 is the main button and in sight without scrolling; 再存一次 is the quiet one.
+  const saved = await page.evaluate(() => {
+    const close = document.querySelector('#result-close');
+    const r = close.getBoundingClientRect();
+    return {inSight: r.top >= 0 && r.bottom <= window.innerHeight + 1 && r.height > 0,
+      primary: close.classList.contains('primary'), again: document.querySelector('#result-download').classList.contains('primary')};
+  });
+  if (!saved.inSight) errors.push(`${at}: 返回挑相框 needs scrolling in the result window`);
+  if (!saved.primary || saved.again) errors.push(`${at}: after saving, 再存一次 is still the main button`);
   await shoot(page, setup, '6-saved-window');
   // Back closes the result window too.
   await page.goBack();
@@ -377,7 +405,7 @@ async function phoneFlow(setup, photos) {
   if (!tiny && !(await page.evaluate(cardsInView)).length) errors.push(`${at}: the error pushed every frame card out of view`);
   await shoot(page, setup, '8-error');
 
-  // 1e. A panorama gets a shorter preview box, not empty space.
+  // 1e. A panorama gets a shorter preview box, not empty space, and the buttons on its corners don't cover it.
   await importPhoto(page, photos.panorama);
   await page.evaluate(() => window.scrollTo(0, 0));
   await settle(page);
@@ -388,9 +416,18 @@ async function phoneFlow(setup, photos) {
     const inner = stage.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     const natural = inner * preview.height / preview.width + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
     const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
-    return {height: stage.clientHeight, natural, min: 7 * rem};
+    // 调整, 改字 and 看大图 sit on the box's corners; a low photo gets a strip above and below for them.
+    const tools = [...document.querySelectorAll('#adjust > summary, #words:not([hidden]) > summary, #dock-view')]
+      .map(el => el.getBoundingClientRect()).filter(r => r.height > 0);
+    const room = 2 * (Math.max(...tools.map(r => r.height)) + .6 * rem);
+    const photo = preview.getBoundingClientRect();
+    // Like on any photo they may touch the frame's border (on the smallest phones), not the picture.
+    const edge = photo.height * .2;
+    const covered = tools.filter(r => r.bottom > photo.top + edge && r.top < photo.bottom - edge && r.right > photo.left && r.left < photo.right).length;
+    return {height: stage.clientHeight, natural, pad: parseFloat(style.paddingTop) + parseFloat(style.paddingBottom), min: 7 * rem, room, covered};
   });
-  if (pano.height > Math.max(pano.natural, pano.min) + 2) errors.push(`${at}: panorama preview box is ${pano.height}px, photo needs ${Math.round(pano.natural)}px`);
+  if (pano.height > Math.max((pano.natural - pano.pad) * 1.4 + pano.room, pano.min) + 2) errors.push(`${at}: panorama preview box is ${pano.height}px, photo needs ${Math.round(pano.natural)}px`);
+  if (pano.covered) errors.push(`${at}: ${pano.covered} buttons cover the panorama in the preview`);
   await shoot(page, setup, '9-panorama');
   await commonChecks(page, at);
   await page.close();
@@ -469,6 +506,11 @@ async function iPhoneFlow(setup, photos) {
   await settle(page);
   const hint = await page.locator('#bar-hint').innerText();
   if (!hint.includes('还没存好')) errors.push(`${at}: closing before saving leaves no note (${hint})`);
+  // The help names this phone's button.
+  await page.locator('#help-open').click();
+  const help = await page.locator('#help-save').innerText();
+  if (!help.includes('「做好照片」')) errors.push(`${at}: the help names other buttons (${help})`);
+  await page.locator('#help-dialog form button').click();
   await shoot(page, setup, '2-not-saved');
   await page.locator('#bar-main').click();
   await page.locator('#result-dialog').waitFor({state: 'visible'});
@@ -521,6 +563,10 @@ async function weChatFlow(photos) {
   const lead = await page.locator('#result-lead').innerText();
   if (!lead.includes('按住')) errors.push(`${at}: no long-press tip (${lead})`);
   if (!(await page.locator('#result-title').innerText()).includes('按住照片')) errors.push(`${at}: the title does not say to press and hold`);
+  // WeChat cannot download, and a download that silently fails was reported as saved.
+  if (await page.locator('#result-download').isVisible()) errors.push(`${at}: WeChat offers a download it cannot do`);
+  const close = await page.locator('#result-close').boundingBox();
+  if (!close || close.y + close.height > setup.viewport.height + 1) errors.push(`${at}: 返回 needs scrolling in the result window`);
   // The long-press tip sits above the picture it points at.
   const order = await page.evaluate(() => document.querySelector('#result-lead').getBoundingClientRect().top < document.querySelector('#result-image').getBoundingClientRect().top);
   if (!order || !lead.includes('下面')) errors.push(`${at}: the tip and the picture are in the wrong order`);

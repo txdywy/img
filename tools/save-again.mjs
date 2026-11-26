@@ -81,8 +81,15 @@ async function round(page, at, mode, n) {
     errors.push(`${where}: the finished photo does not show`);
   }
   let now = await state(page);
-  if (mode === 'download' || mode === 'wechat') {
-    if (mode === 'wechat' && !now.title.includes('按住')) errors.push(`${where}: WeChat is not told to press and hold (${now.title})`);
+  if (mode === 'wechat') {
+    // WeChat cannot download and never says whether a download failed, so the
+    // long press is the one way offered, and the page never claims it saved.
+    if (!now.title.includes('按住')) errors.push(`${where}: WeChat is not told to press and hold (${now.title})`);
+    if (await page.locator('#result-download').isVisible()) errors.push(`${where}: WeChat offers a download it cannot do`);
+    const src = await page.evaluate(() => document.querySelector('#result-image').src.slice(0, 5));
+    if (src !== 'data:') errors.push(`${where}: the photo to press and hold is ${src}…, not the image itself`);
+    if (now.title.includes('已保存')) errors.push(`${where}: claims the photo is saved`);
+  } else if (mode === 'download') {
     const download = page.waitForEvent('download', {timeout: 8000}).catch(() => null);
     await page.locator('#result-download').click();
     const file = await download;
