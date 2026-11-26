@@ -63,6 +63,17 @@ async function open(setup) {
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Page.setFontSizes', {fontSizes: {standard: setup.font, fixed: Math.round(setup.font * .8)}});
   }
+  // Like WeChat on a real phone, which offers the phone's share menu to pages.
+  if (setup.share) {
+    await page.addInitScript(() => {
+      window.shares = 0;
+      navigator.canShare = data => Boolean(data && data.files && data.files.length);
+      navigator.share = () => {
+        window.shares++;
+        return Promise.resolve();
+      };
+    });
+  }
   if (setup.userAgent && /Macintosh/.test(setup.userAgent)) {
     await page.addInitScript(() => Object.defineProperty(Navigator.prototype, 'maxTouchPoints', {get: () => 5}));
   }
@@ -548,7 +559,7 @@ async function oldBrowserFlow() {
 // WeChat: no download, so the result image itself must show for a long-press save.
 async function weChatFlow(photos) {
   const setup = {
-    name: 'wechat-390x844', viewport: {width: 390, height: 844}, phone: true,
+    name: 'wechat-390x844', viewport: {width: 390, height: 844}, phone: true, share: true,
     userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 MicroMessenger/8.0.50',
   };
   const at = setup.name;
@@ -565,6 +576,12 @@ async function weChatFlow(photos) {
   if (!(await page.locator('#result-title').innerText()).includes('按住照片')) errors.push(`${at}: the title does not say to press and hold`);
   // WeChat cannot download, and a download that silently fails was reported as saved.
   if (await page.locator('#result-download').isVisible()) errors.push(`${at}: WeChat offers a download it cannot do`);
+  // Inside WeChat the phone's share menu cannot reach a WeChat friend: its 转发给朋友
+  // closes without a friend list. Sending goes by WeChat's own long-press menu.
+  if (await page.locator('#share').isVisible()) errors.push(`${at}: WeChat offers the phone's share menu, which cannot send to a WeChat friend`);
+  if (!lead.includes('发送给朋友')) errors.push(`${at}: not told how to send it to family (${lead})`);
+  const title = await page.locator('#result-title').innerText();
+  if (!title.includes('发给家人')) errors.push(`${at}: the title does not say it can be sent to family (${title})`);
   const close = await page.locator('#result-close').boundingBox();
   if (!close || close.y + close.height > setup.viewport.height + 1) errors.push(`${at}: 返回 needs scrolling in the result window`);
   // The long-press tip sits above the picture it points at.
