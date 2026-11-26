@@ -88,7 +88,12 @@ async function round(page, at, mode, n) {
     if (await page.locator('#result-download').isVisible()) errors.push(`${where}: WeChat offers a download it cannot do`);
     const src = await page.evaluate(() => document.querySelector('#result-image').src.slice(0, 5));
     if (src !== 'data:') errors.push(`${where}: the photo to press and hold is ${src}…, not the image itself`);
-    if (now.title.includes('已保存')) errors.push(`${where}: claims the photo is saved`);
+    if (now.title.includes('已保存') || now.title.includes('好了')) errors.push(`${where}: claims the photo is saved`);
+    // WeChat offers the share menu to pages, but its 转发给朋友 there closes without a
+    // friend list, so the page leaves it out and points at WeChat's own long-press menu.
+    if (now.share) errors.push(`${where}: WeChat offers the phone's share menu, which cannot send to a WeChat friend`);
+    if (!now.lead.includes('发送给朋友')) errors.push(`${where}: WeChat is not told how to send it to family (${now.lead})`);
+    if (await page.evaluate(() => window.shares)) errors.push(`${where}: the share menu was opened in WeChat`);
   } else if (mode === 'download') {
     const download = page.waitForEvent('download', {timeout: 8000}).catch(() => null);
     await page.locator('#result-download').click();
@@ -142,7 +147,8 @@ for (const name of profiles) {
     const device = playwright.devices[name];
     const context = await browser.newContext({...device, acceptDownloads: true,
       userAgent: mode === 'wechat' ? device.userAgent + wechat : device.userAgent});
-    if (mode === 'works' || mode === 'stuck') await context.addInitScript(fakeShare, mode);
+    // WeChat on iPhone offers the share menu to pages too (its 转发给朋友 just does not work there).
+    if (mode !== 'download') await context.addInitScript(fakeShare, mode === 'wechat' ? 'works' : mode);
     const page = await context.newPage();
     page.on('pageerror', error => errors.push(`${at} page error: ${error.message}`));
     try {

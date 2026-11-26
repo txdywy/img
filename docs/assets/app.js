@@ -1,8 +1,8 @@
-import {frames, categories, byId} from './frames.js?v=18';
-import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=18';
-import {setupAnalytics, track} from './analytics.js?v=18';
-import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=18';
-import {photoDate} from './photo-date.js?v=18';
+import {frames, categories, byId} from './frames.js?v=19';
+import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=19';
+import {setupAnalytics, track} from './analytics.js?v=19';
+import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=19';
+import {photoDate} from './photo-date.js?v=19';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -36,6 +36,10 @@ const isApple = /iPhone|iPad|iPod/.test(navigator.userAgent)
 // WeChat's own browser usually cannot download files; a long press on the picture saves it.
 // QQ, Weibo, DingTalk and Alipay open links in similar built-in browsers.
 const isWeChat = /MicroMessenger/i.test(navigator.userAgent);
+// Inside WeChat the phone's share menu cannot send to a WeChat friend: WeChat's own
+// 转发给朋友 there has to switch to the WeChat app to pick a friend, but WeChat is
+// already the app on screen, so the menu just closes and the page comes back without
+// anything sent. WeChat's own long-press menu on the photo has 发送给朋友 instead.
 const longPressSave = isWeChat || /\bQQ\/|Weibo|DingTalk|AlipayClient/i.test(navigator.userAgent);
 const isAndroid = /Android|HarmonyOS|OpenHarmony/i.test(navigator.userAgent);
 const coarsePointer = window.matchMedia('(pointer: coarse)');
@@ -830,6 +834,7 @@ function holdToSave() {
 
 // What a long press offers is called differently on each phone and iOS version.
 function holdLead() {
+  if (isWeChat) return '用手指按住下面的照片不放，选「发送给朋友」就能发给家人；选「保存图片」就存进相册。';
   return longPressSave
     ? '用手指按住下面的照片不放，选「保存图片」，就存进相册了。'
     : '用手指按住下面的照片不放，选「存储到“照片”」或「存储图像」，就存进相册了。也可以点「下载到文件」。';
@@ -839,7 +844,7 @@ function showResult(opener) {
   // A share that never finished means the next one would fail (see sharePending).
   if (sharePending) shareBroken = true;
   const hold = holdToSave();
-  const canShare = !shareBroken && Boolean(resultFile && navigator.canShare && navigator.canShare({files: [resultFile]}));
+  const canShare = !shareBroken && !isWeChat && Boolean(resultFile && navigator.canShare && navigator.canShare({files: [resultFile]}));
   // On iPhone and iPad, the share sheet is the direct way into Photos.
   const shareFirst = canShare && isApple && !longPressSave;
   share.hidden = !canShare;
@@ -855,7 +860,8 @@ function showResult(opener) {
   const lead = $('result-lead');
   lead.classList.remove('saved');
   // Honest about the one step that is left: the photo is made, not yet saved.
-  $('result-title').textContent = hold ? '还差一步：按住照片保存' : '还差一步：把照片存好';
+  $('result-title').textContent = isWeChat ? '按住照片，发给家人或保存'
+    : hold ? '还差一步：按住照片保存' : '还差一步：把照片存好';
   lead.textContent = hold ? holdLead()
     : shareFirst ? '点下面的「保存到相册」，在弹出的菜单里选「存储图像」。'
     : '点下面的「下载照片」，存到这台设备。';
@@ -1343,6 +1349,7 @@ window.addEventListener('beforeunload', event => {
 function helpSave() {
   const make = savesDirectly() ? '保存照片' : phoneLayout.matches ? '做好照片' : '做好这张照片';
   $('help-save').textContent = savesDirectly() ? `满意了就点「${make}」，照片会存进手机的「下载」。`
+    : isWeChat ? `满意了就点「${make}」，再用手指按住照片，选「发送给朋友」或「保存图片」。`
     : longPressSave ? `满意了就点「${make}」，再用手指按住照片，选「保存图片」。`
     : isApple ? `满意了就点「${make}」，再按提示存进相册。`
     : `满意了就点「${make}」，再点「下载照片」。`;
