@@ -1181,11 +1181,19 @@ function syncStamp() {
 function fitFrameHead() {
   const title = $('frame-title');
   const head = title.parentElement;
-  head.classList.remove('tight');
+  head.classList.remove('tight', 'stacked');
   if (!isUserPhoto) return;
-  const titleBox = title.getBoundingClientRect();
-  const switchBox = $('date-switch').getBoundingClientRect();
-  if (switchBox.top >= titleBox.top + titleBox.height / 2) head.classList.add('tight');
+  const wrapped = () => {
+    const titleBox = title.getBoundingClientRect();
+    return $('date-switch').getBoundingClientRect().top >= titleBox.top + titleBox.height / 2;
+  };
+  if (!wrapped()) return;
+  head.classList.add('tight');
+  if (!wrapped()) return;
+  // Even 换相框 leaves no room (very large text): the switch gets a line of its own,
+  // under the whole heading, without reaching up over it.
+  head.classList.remove('tight');
+  head.classList.add('stacked');
 }
 
 $('date-on').addEventListener('change', event => {

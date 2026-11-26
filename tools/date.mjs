@@ -150,7 +150,13 @@ async function check(setup) {
   }
   // Tapping scrolls the switch into view first, as a finger would need it in sight; do
   // that before measuring, so only what the switch itself does is compared.
-  await toggle.scrollIntoViewIfNeeded();
+  // Clear of the bottom bar too, or the tap would scroll the page itself.
+  await toggle.evaluate(el => {
+    const box = el.getBoundingClientRect();
+    const bar = document.getElementById('bar').getBoundingClientRect();
+    const bottom = bar.height > 0 ? bar.top : window.innerHeight;
+    if (box.top < 0 || box.bottom > bottom - 8) el.scrollIntoView({block: 'center'});
+  });
   await settle(page);
   // The first frame (全家福) has no date until the switch is turned on.
   const before = await snapshot(page);
