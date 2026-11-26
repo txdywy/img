@@ -237,11 +237,13 @@ async function travel() {
     // Wait for this picture, not the one made before it.
     const before = await page.locator('#result-image').getAttribute('src');
     await page.locator('#bar-main').click();
-    await page.waitForFunction(previous => {
+    // page.evaluate, not waitForFunction: the page's security policy refuses the latter in WebKit.
+    const made = await waitFor(page, previous => {
       const img = document.getElementById('result-image');
       const src = img.getAttribute('src');
-      return src && src !== previous && img.complete && img.naturalWidth > 0;
-    }, before, {timeout: 15000});
+      return Boolean(src && src !== previous && img.complete && img.naturalWidth > 0);
+    }, before, 150);
+    if (!made) throw new Error('the finished picture did not appear');
     const value = await page.evaluate(() => new Promise(resolve => {
       const img = document.getElementById('result-image');
       const done = () => {
