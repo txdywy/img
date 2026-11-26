@@ -332,14 +332,15 @@ function motifs(ctx, w, h, m, frame) {
 }
 
 // One line of words in the bottom border: a blessing, a greeting or a place and date.
-function caption(ctx, width, height, m, area, frame, text) {
+// With a date under it (raised), the words move up a little to make room.
+function caption(ctx, width, height, m, area, frame, text, raised = false) {
   const top = area.y + area.h;
   const band = height - top;
   const left = frame.caption === 'travel';
   const family = left ? SANS : SERIF;
   const weight = left ? 600 : 700;
   const room = left ? area.w * .72 : Math.max(area.w * .5, area.w - m * 3.2);
-  let size = Math.min(band * .5, m * .78);
+  let size = raised ? Math.min(band * .36, m * .7) : Math.min(band * .5, m * .78);
   ctx.save();
   ctx.font = `${weight} ${size}px ${family}`;
   const measured = ctx.measureText(text).width;
@@ -350,7 +351,33 @@ function caption(ctx, width, height, m, area, frame, text) {
   ctx.fillStyle = frame.ink;
   ctx.textAlign = left ? 'left' : 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, left ? area.x : width / 2, top + band / 2);
+  ctx.fillText(text, left ? area.x : width / 2, top + band * (raised ? .4 : .5));
+  ctx.restore();
+}
+
+// Frames whose bottom border is covered in pattern get a small paper label under the date.
+const busyBottom = ['mountain', 'waves', 'film'];
+
+// The date sits in the middle of the bottom border, clear of the corner decorations.
+// It never changes the frame's size, so turning it on or off does not move anything.
+function dateStamp(ctx, width, height, m, area, frame, text, under) {
+  const top = area.y + area.h;
+  const band = height - top;
+  const size = under ? Math.min(band * .2, m * .42) : Math.min(band * .44, m * .44);
+  const y = top + band * (under ? .79 : .5);
+  ctx.save();
+  ctx.font = `600 ${size}px ${SANS}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (busyBottom.includes(frame.motif)) {
+    const w = ctx.measureText(text).width + size * 1.2;
+    const h = size * 1.5;
+    ctx.globalAlpha = .92;
+    box(ctx, width / 2 - w / 2, y - h / 2, w, h, frame.paper);
+    ctx.globalAlpha = 1;
+  }
+  ctx.fillStyle = frame.ink;
+  ctx.fillText(text, width / 2, y);
   ctx.restore();
 }
 
@@ -451,5 +478,7 @@ export function paint(canvas, image, frame, options, {width, height, m, area}) {
   ctx.lineWidth = Math.max(.1, m * .025);
   ctx.strokeRect(area.x, area.y, area.w, area.h);
   motifs(ctx, width, height, m, frame);
-  if (options.text) caption(ctx, width, height, m, area, frame, options.text);
+  const under = Boolean(options.text && options.date);
+  if (options.text) caption(ctx, width, height, m, area, frame, options.text, under);
+  if (options.date) dateStamp(ctx, width, height, m, area, frame, options.date, under);
 }

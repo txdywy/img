@@ -122,6 +122,35 @@ body.dragging::after {
   font-size: 1.5rem; font-weight: 750; pointer-events: none;
 }
 
+/* The date switch beside the frames heading: a big label, a switch drawn the way phone
+   settings draw one, and the whole pill is the tap target. Its size never changes. */
+.panel-head.with-date #frame-title { margin-right: auto; }
+/* With large text or zoom the heading and the switch would not fit on one line, which
+   would push the frames down; then the heading says just 换相框 (set by app.js). */
+.panel-head.tight .title-tap { display: none; }
+.panel-head.stacked .date-switch { margin-top: 0; margin-bottom: 0; }
+/* Each category chip already shows its count; the date switch takes this place. */
+.with-date .frame-count { display: none; }
+.date-switch {
+  position: relative; display: inline-flex; align-items: center; gap: .5rem; min-height: var(--tap); margin-left: auto; padding: .2rem .8rem .2rem .55rem;
+  border: 1px solid var(--edge); border-radius: 2rem; background: var(--panel); color: var(--ink);
+  font-size: 1.125rem; font-weight: 700; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  /* Taller than the heading so it is easy to tap, but it takes only the heading's height,
+     so showing it never pushes the frames down (the extra reaches into the margins). */
+  margin-top: calc((1.32rem * 1.4 - var(--tap)) / 2); margin-bottom: calc((1.32rem * 1.4 - var(--tap)) / 2);
+}
+.date-switch[hidden] { display: none; }
+.date-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.switch-track { position: relative; flex: none; width: 2.6rem; height: 1.5rem; border-radius: 1rem; background: #cfc6bb; transition: background-color .15s ease-out; }
+.switch-track::after {
+  content: ""; position: absolute; top: .15rem; left: .15rem; width: 1.2rem; height: 1.2rem; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px #3329232e; transition: transform .15s ease-out;
+}
+.date-switch input:checked + .switch-track { background: var(--rose); }
+.date-switch input:checked + .switch-track::after { transform: translateX(1.1rem); }
+.date-switch:has(input:checked) { border-color: var(--rose); background: var(--rose-light); }
+.date-switch input:focus-visible + .switch-track { outline: 3px solid var(--rose); outline-offset: 2px; }
+
 /* Adjustments and words: disclosures under the photo on wide screens, sheets on phones */
 .dock-tools { margin-top: 1rem; border-top: 1px solid var(--line); }
 .sheet + .sheet { border-top: 1px solid var(--line); }
