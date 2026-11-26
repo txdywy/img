@@ -1,7 +1,8 @@
-import {frames, categories, byId} from './frames.js?v=17';
-import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=17';
-import {setupAnalytics, track} from './analytics.js?v=17';
-import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=17';
+import {frames, categories, byId} from './frames.js?v=18';
+import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=18';
+import {setupAnalytics, track} from './analytics.js?v=18';
+import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=18';
+import {photoDate} from './photo-date.js?v=18';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -78,27 +79,45 @@ let savedNote = false;
 let madeNotSaved = false;
 let importProblem = '';
 let zoomed = false;
+// What the date switch just did, said once in the bar on phones.
+let stampNote = '';
 const today = new Date();
 const captions = {
   blessing: {on: true, text: '福如东海 · 寿比南山'},
   birthday: {on: true, text: '生日快乐'},
-  travel: {on: true, text: '', date: `${today.getFullYear()}.${today.getMonth() + 1}.${today.getDate()}`},
+  travel: {on: true, text: ''},
 };
+// The date on the frame, shared by every frame. Off until someone turns it on, except
+// on 出游纪念, which has always shown one. taken is the day the photo was taken (from
+// the photo itself), typed is a date someone wrote on 出游纪念 (empty: no date at all);
+// otherwise it is today.
+const stamp = {on: null, taken: null, typed: null};
+const todayParts = {year: today.getFullYear(), month: today.getMonth() + 1, day: today.getDate()};
+const stampOn = frame => stamp.on === null ? frame.caption === 'travel' : stamp.on;
+function stampText() {
+  if (stamp.typed !== null) return stamp.typed.trim();
+  const {year, month, day} = stamp.taken || todayParts;
+  return `${year}.${month}.${day}`;
+}
 const captionLabels = {
   blessing: {toggle: '加一句祝福', text: '祝福语', placeholder: '福如东海 · 寿比南山'},
   birthday: {toggle: '加上祝福文字', text: '文字', placeholder: '生日快乐'},
-  travel: {toggle: '写上地点和日期', text: '地点', placeholder: '例如：杭州西湖'},
+  travel: {toggle: '写上地点', text: '地点', placeholder: '例如：杭州西湖'},
 };
 
 function captionFor(frame) {
   const state = captions[frame.caption];
+  const date = stampOn(frame) ? stampText() : '';
+  // 出游纪念 keeps its one line: place and date side by side, as before.
+  if (frame.caption === 'travel') return [state.on ? state.text.trim() : '', date].filter(Boolean).join('  ·  ');
   if (!state || !state.on) return '';
-  if (frame.caption === 'travel') return [state.text.trim(), state.date.trim()].filter(Boolean).join('  ·  ');
   return state.text.trim();
 }
 
-// The settings a frame is drawn with: the shared adjustments plus its own words.
-const look = (frame, base = options) => ({...base, text: captionFor(frame)});
+// The settings a frame is drawn with: the shared adjustments plus its own words and date.
+const look = (frame, base = options) => ({
+  ...base, text: captionFor(frame), date: stampOn(frame) && frame.caption !== 'travel' ? stampText() : '',
+});
 
 const pixelRatio = () => Math.min(2, Math.max(1, window.devicePixelRatio || 1));
 const clamp = value => Math.max(0, Math.min(1, value));
@@ -158,7 +177,9 @@ function updateBar() {
   const pending = madeNotSaved && !resultDialog.open;
   hint.textContent = problem || (savedNote ? '✓ 已保存，还可以再换相框'
     : pending ? `还没存好，再点「${make}」`
-    : isUserPhoto ? '点相框，换个样式' 
+    // What the date switch just did, until the next change.
+    : stampNote ? stampNote
+    : isUserPhoto ? '点相框，换个样式'
     // Said before the first tap, for people who worry about their original photo.
     : '会另存一张，原照片还在');
   hint.classList.toggle('error', Boolean(problem));
@@ -334,6 +355,7 @@ function chooseFrame(frame) {
   clearImportError();
   updateFrameSelection();
   syncCaption();
+  syncStamp();
   syncOptions();
   requestPreview();
   track('frame_selected');
@@ -461,13 +483,16 @@ async function importPhoto(file) {
   showStatus('正在打开照片…');
   updateSave();
   try {
-    const photo = await readPhoto(file);
+    const [photo, taken] = await Promise.all([readPhoto(file), photoDate(file)]);
     if (version !== importVersion) {
       if (photo.close) photo.close();
       return;
     }
     const first = !isUserPhoto;
     setImage(photo);
+    stamp.taken = taken;
+    stamp.typed = null;
+    stampNote = '';
     isUserPhoto = true;
     unsaved = true;
     savedNote = false;
@@ -482,6 +507,7 @@ async function importPhoto(file) {
     previewDirty = true;
     drawPreview();
     refreshGalleryPreviews();
+    syncStamp();
     if (first) showFrames();
     track('photo_selected');
   } catch (error) {
@@ -606,6 +632,10 @@ function applyAdjustment(next) {
 function markEdited() {
   if (!isUserPhoto) return;
   unsaved = true;
+  if (stampNote) {
+    stampNote = '';
+    updateBar();
+  }
   // "照片已选好" has done its job once something else happens.
   if (!importProblem && !reading && status.textContent) showStatus('');
   if (savedNote || madeNotSaved) {
@@ -1080,8 +1110,8 @@ function syncCaption() {
   $('caption-text').placeholder = labels.placeholder;
   $('caption-text').value = state.text;
   $('caption-clear').disabled = !state.text;
-  $('caption-date').value = state.date || '';
-  $('caption-date-row').hidden = kind !== 'travel';
+  $('caption-date').value = stampText();
+  $('caption-date-row').hidden = !(kind === 'travel' && stampOn(selected));
   $('caption-fields').hidden = !state.on;
   $('words-summary').textContent = kind === 'travel' ? '写地点和日期' : '改相框上的祝福语';
 }
@@ -1123,9 +1153,37 @@ for (const id of ['caption-text', 'caption-date']) {
     }
   });
 }
+// On 出游纪念 the date can be written by hand; it is the same date every frame shows.
 $('caption-date').addEventListener('input', event => {
-  captions[selected.caption].date = event.target.value;
-  captionChanged();
+  stamp.typed = event.target.value;
+  markEdited();
+  syncOptions();
+  requestPreview();
+  refreshGalleryPreviews();
+});
+
+// The date switch beside 点一下，换相框: one tap puts the date on or takes it off.
+// It shows once the user's own photo is in, and stays in the same place on every frame.
+function syncStamp() {
+  $('date-switch').hidden = !isUserPhoto;
+  $('date-on').checked = stampOn(selected);
+  // On phones the switch takes the place of the frame count (each category shows its own).
+  $('frame-title').parentElement.classList.toggle('with-date', isUserPhoto);
+}
+
+$('date-on').addEventListener('change', event => {
+  stamp.on = event.target.checked;
+  markEdited();
+  syncCaption();
+  syncOptions();
+  requestPreview();
+  refreshGalleryPreviews();
+  const {year, month, day} = stamp.taken || todayParts;
+  stampNote = !stamp.on ? '日期去掉了'
+    : stamp.typed !== null ? (stampText() ? `印上了：${stampText()}` : '日期是空的，在「改字」里写上')
+    : stamp.taken ? `印上了拍照那天：${year}年${month}月${day}日` : '照片里没有拍照日期，先印上今天';
+  showStatus(stampNote);
+  track('date_toggled');
 });
 
 // Phones: the preview shrinks to leave room under it for the categories and a whole

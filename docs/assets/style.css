@@ -122,6 +122,26 @@ body.dragging::after {
   font-size: 1.5rem; font-weight: 750; pointer-events: none;
 }
 
+/* The date switch beside the frames heading: a big label, a switch drawn the way phone
+   settings draw one, and the whole pill is the tap target. Its size never changes. */
+.panel-head.with-date #frame-title { margin-right: auto; }
+.date-switch {
+  position: relative; display: inline-flex; align-items: center; gap: .5rem; min-height: var(--tap); margin-left: auto; padding: .2rem .8rem .2rem .55rem;
+  border: 1px solid var(--edge); border-radius: 2rem; background: var(--panel); color: var(--ink);
+  font-size: 1.125rem; font-weight: 700; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.date-switch[hidden] { display: none; }
+.date-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.switch-track { position: relative; flex: none; width: 2.6rem; height: 1.5rem; border-radius: 1rem; background: #cfc6bb; transition: background-color .15s ease-out; }
+.switch-track::after {
+  content: ""; position: absolute; top: .15rem; left: .15rem; width: 1.2rem; height: 1.2rem; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px #3329232e; transition: transform .15s ease-out;
+}
+.date-switch input:checked + .switch-track { background: var(--rose); }
+.date-switch input:checked + .switch-track::after { transform: translateX(1.1rem); }
+.date-switch:has(input:checked) { border-color: var(--rose); background: var(--rose-light); }
+.date-switch input:focus-visible + .switch-track { outline: 3px solid var(--rose); outline-offset: 2px; }
+
 /* Adjustments and words: disclosures under the photo on wide screens, sheets on phones */
 .dock-tools { margin-top: 1rem; border-top: 1px solid var(--line); }
 .sheet + .sheet { border-top: 1px solid var(--line); }
@@ -395,6 +415,8 @@ dialog::backdrop { background: #32231995; }
 
   .frames-panel { padding-top: .9rem; }
   .frames-panel .panel-head { margin-bottom: .6rem; }
+  /* Each category already shows its count; the date switch takes this place. */
+  .with-date .frame-count { display: none; }
   .filters { gap: .5rem; }
   .frame-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
   .frame { padding: .45rem .45rem .5rem; }

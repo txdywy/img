@@ -51,6 +51,9 @@ jobs:
       - name: Saving again without reloading (second photo, new frame and words)
         if: always()
         run: node tools/save-again.mjs
+      - name: Date on the frame (加日期 switch, the day the photo was taken, nothing moves)
+        if: always()
+        run: node tools/date.mjs
       - name: Keep the screenshots for review
         if: always()
         uses: actions/upload-artifact@v7
@@ -86,6 +89,11 @@ jobs:
       - name: Saving again without reloading in WebKit (iPhone share sheet that gets stuck)
         if: always()
         run: node tools/save-again.mjs
+        env:
+          ENGINE: webkit
+      - name: Date on the frame in WebKit
+        if: always()
+        run: node tools/date.mjs
         env:
           ENGINE: webkit
       - name: Keep the screenshots for review
