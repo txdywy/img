@@ -481,11 +481,17 @@ async function wideFlow(setup, photos) {
   await page.locator('#result-download').click();
   await download;
   title = await page.locator('#result-title').innerText();
-  if (!title.includes('已保存')) errors.push(`${at}: after saving, the window title says ${title}`);
+  // iPad Safari asks once more whether to download and never tells the page: the window
+  // says what to tap there and the page claims nothing. Elsewhere the download is saved.
+  const ipad = await page.evaluate(() => /iPhone|iPad|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+  if (ipad ? !title.includes('点「下载」') || title.includes('已保存') : !title.includes('已保存')) {
+    errors.push(`${at}: after saving, the window title says ${title}`);
+  }
   await page.locator('#result-close').click();
   await settle(page);
   const hint = await page.locator('#save-hint').innerText();
-  if (!hint.includes('已保存')) errors.push(`${at}: no 已保存 note after saving (${hint})`);
+  if (ipad ? hint.includes('已保存') : !hint.includes('已保存')) errors.push(`${at}: after saving the page says ${hint}`);
   await shoot(page, setup, '2-saved');
   await commonChecks(page, at);
   await page.close();
@@ -530,11 +536,14 @@ async function iPhoneFlow(setup, photos) {
   if (!(await file)) errors.push(`${at}: 下载照片 did not download`);
   const done = await page.locator('#result-title').innerText();
   const lead = await page.locator('#result-lead').innerText();
-  if (!done.includes('已保存') || !lead.includes('文件')) errors.push(`${at}: after saving: ${done} / ${lead}`);
+  // Safari asks once more whether to download and never tells the page, so the window
+  // says what to tap there, and the page claims nothing afterwards.
+  if (!done.includes('点「下载」') || done.includes('已保存') || !lead.includes('文件')) errors.push(`${at}: after 下载照片: ${done} / ${lead}`);
   await shoot(page, setup, '3-saved');
   await page.goBack();
   await waitFor(page, () => !document.querySelector('#result-dialog').open);
-  if (!(await page.locator('#bar-hint').innerText()).includes('已保存')) errors.push(`${at}: no 已保存 note after saving`);
+  const after = await page.locator('#bar-hint').innerText();
+  if (after.includes('已保存') || after.includes('还没存好')) errors.push(`${at}: the bar guesses whether the download was kept (${after})`);
   await commonChecks(page, at);
   await page.close();
 }

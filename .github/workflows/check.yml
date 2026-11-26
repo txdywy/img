@@ -54,6 +54,9 @@ jobs:
       - name: Date on the frame (加日期 switch, the day the photo was taken, nothing moves)
         if: always()
         run: node tools/date.mjs
+      - name: Problems from the outside retest (no-date photos, 改字 date, save state, a photo that does not open)
+        if: always()
+        run: node tools/retest.mjs
       - name: Keep the screenshots for review
         if: always()
         uses: actions/upload-artifact@v7
@@ -94,6 +97,11 @@ jobs:
       - name: Date on the frame in WebKit
         if: always()
         run: node tools/date.mjs
+        env:
+          ENGINE: webkit
+      - name: Problems from the outside retest in WebKit
+        if: always()
+        run: node tools/retest.mjs
         env:
           ENGINE: webkit
       - name: Keep the screenshots for review

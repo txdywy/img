@@ -151,7 +151,8 @@ for (const name of profiles) {
     await page.locator('#result-download').click();
     await download;
     const done = await page.locator('#result-title').innerText();
-    if (!done.includes('已保存')) errors.push(`${at}: after saving the window says ${done}`);
+    // Safari asks once more whether to download; the window says to tap 下载 there.
+    if (!done.includes('点「下载」') || done.includes('已保存')) errors.push(`${at}: after 下载 the window says ${done}`);
     await shoot('4-saved');
   } catch (error) {
     errors.push(`${at}: test stopped: ${String(error.message || error).split('\n').slice(0, 3).join(' ')}`);
