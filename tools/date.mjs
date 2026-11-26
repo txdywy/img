@@ -134,6 +134,18 @@ const snapshot = page => page.evaluate(() => {
   };
 });
 
+// Tapping scrolls a control into view first, as a finger needs it in sight (clear of the
+// bottom bar too); do that before measuring, so only what the tap itself does is compared.
+async function inSight(page, control) {
+  await control.evaluate(el => {
+    const box = el.getBoundingClientRect();
+    const bar = document.getElementById('bar').getBoundingClientRect();
+    const bottom = bar.height > 0 ? bar.top : window.innerHeight;
+    if (box.top < 0 || box.bottom > bottom - 8) el.scrollIntoView({block: 'center'});
+  });
+  await settle(page);
+}
+
 async function check(setup) {
   const at = `${engine} ${setup.name}`;
   const page = await open(setup);
@@ -148,16 +160,7 @@ async function check(setup) {
     await page.close();
     return;
   }
-  // Tapping scrolls the switch into view first, as a finger would need it in sight; do
-  // that before measuring, so only what the switch itself does is compared.
-  // Clear of the bottom bar too, or the tap would scroll the page itself.
-  await toggle.evaluate(el => {
-    const box = el.getBoundingClientRect();
-    const bar = document.getElementById('bar').getBoundingClientRect();
-    const bottom = bar.height > 0 ? bar.top : window.innerHeight;
-    if (box.top < 0 || box.bottom > bottom - 8) el.scrollIntoView({block: 'center'});
-  });
-  await settle(page);
+  await inSight(page, toggle);
   // The first frame (全家福) has no date until the switch is turned on.
   const before = await snapshot(page);
   if (before.on) errors.push(`${at}: the date switch starts on`);
@@ -201,12 +204,15 @@ async function check(setup) {
 
   // Off again: the border is as it was on the first frame.
   await page.locator('#frames button[data-frame]').first().click();
+  await settle(page);
+  await inSight(page, toggle);
+  const back = await snapshot(page);
   await toggle.click();
   await waitFor(page, () => !document.getElementById('date-on').checked);
   await settle(page);
   const off = await snapshot(page);
   if (off.bottom !== before.bottom) errors.push(`${at}: turning the date off left something in the bottom border`);
-  if (off.stage !== before.stage) errors.push(`${at}: turning the date off moved the preview`);
+  if (off.stage !== back.stage) errors.push(`${at}: turning the date off moved the preview (${back.stage} -> ${off.stage})`);
 
   const sideways = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   if (sideways > 0) errors.push(`${at}: the page scrolls sideways by ${sideways}px`);
