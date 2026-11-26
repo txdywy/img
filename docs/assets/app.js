@@ -1168,7 +1168,24 @@ function syncStamp() {
   $('date-switch').hidden = !isUserPhoto;
   $('date-on').checked = stampOn(selected);
   // On phones the switch takes the place of the frame count (each category shows its own).
-  $('frame-title').parentElement.classList.toggle('with-date', isUserPhoto);
+  const head = $('frame-title').parentElement;
+  if (head.classList.contains('with-date') !== isUserPhoto) {
+    head.classList.toggle('with-date', isUserPhoto);
+    fitFrameHead();
+    scheduleLayout();
+  }
+}
+
+// The heading and the date switch share one line. If large text or zoom would push the
+// switch onto a line of its own (and the frames further down), the heading is shortened.
+function fitFrameHead() {
+  const title = $('frame-title');
+  const head = title.parentElement;
+  head.classList.remove('tight');
+  if (!isUserPhoto) return;
+  const titleBox = title.getBoundingClientRect();
+  const switchBox = $('date-switch').getBoundingClientRect();
+  if (switchBox.top >= titleBox.top + titleBox.height / 2) head.classList.add('tight');
 }
 
 $('date-on').addEventListener('change', event => {
@@ -1240,6 +1257,7 @@ function layoutPage() {
   const root = document.documentElement;
   const rem = parseFloat(getComputedStyle(root).fontSize) || 16;
   const view = steadyViewHeight();
+  fitFrameHead();
   root.classList.toggle('short-phone', phoneLayout.matches && view <= 34 * rem);
   const bar = $('bar');
   root.style.setProperty('--bar-h', `${phoneLayout.matches ? bar.offsetHeight : 0}px`);

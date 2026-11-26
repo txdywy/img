@@ -148,13 +148,28 @@ async function check(setup) {
     await page.close();
     return;
   }
+  // Tapping scrolls the switch into view first, as a finger would need it in sight; do
+  // that before measuring, so only what the switch itself does is compared.
+  await toggle.scrollIntoViewIfNeeded();
+  await settle(page);
   // The first frame (全家福) has no date until the switch is turned on.
   const before = await snapshot(page);
   if (before.on) errors.push(`${at}: the date switch starts on`);
 
   const box = await toggle.boundingBox();
-  const lineHeight = await toggle.evaluate(el => parseFloat(getComputedStyle(el).fontSize) * 2.4);
-  if (box.height > Math.max(lineHeight, 48)) errors.push(`${at}: the date switch wraps (${Math.round(box.height)}px tall)`);
+  // 加日期 stays on one line (the pill itself is at least a finger tall, so its height says nothing).
+  const lines = await toggle.evaluate(el => {
+    const words = el.lastElementChild;
+    return Math.round(words.getBoundingClientRect().height / (parseFloat(getComputedStyle(words).fontSize) * 1.2));
+  });
+  if (lines > 1) errors.push(`${at}: 加日期 wraps onto ${lines} lines`);
+  // The heading and the switch share one line, so the frames are not pushed down.
+  const sameLine = await page.evaluate(() => {
+    const title = document.getElementById('frame-title').getBoundingClientRect();
+    const pill = document.getElementById('date-switch').getBoundingClientRect();
+    return pill.top < title.top + title.height / 2;
+  });
+  if (!sameLine && !setup.font) errors.push(`${at}: the date switch fell below the heading`);
   if (box.height < 44 || box.width < 44) errors.push(`${at}: the date switch is too small to tap (${Math.round(box.width)}x${Math.round(box.height)})`);
   const title = await page.locator('#frame-title').boundingBox();
   const overlap = !(box.x >= title.x + title.width || box.x + box.width <= title.x || box.y >= title.y + title.height || box.y + box.height <= title.y);
@@ -219,8 +234,14 @@ async function travel() {
   await page.locator('#frames button[data-frame="family"]').click();
   await settle(page);
   const bottomOfResult = async () => {
+    // Wait for this picture, not the one made before it.
+    const before = await page.locator('#result-image').getAttribute('src');
     await page.locator('#bar-main').click();
-    await page.locator('#result-image[src]').waitFor({state: 'attached', timeout: 15000});
+    await page.waitForFunction(previous => {
+      const img = document.getElementById('result-image');
+      const src = img.getAttribute('src');
+      return src && src !== previous && img.complete && img.naturalWidth > 0;
+    }, before, {timeout: 15000});
     const value = await page.evaluate(() => new Promise(resolve => {
       const img = document.getElementById('result-image');
       const done = () => {
@@ -238,8 +259,10 @@ async function travel() {
       if (img.complete && img.naturalWidth) done();
       else img.onload = done;
     }));
-    await page.keyboard.press('Escape');
-    await page.locator('#result-dialog').waitFor({state: 'hidden'});
+    // 返回, as people close it (Escape does not reach the dialog in WebKit here).
+    await page.locator('#result-close').click();
+    await waitFor(page, () => !document.querySelector('#result-dialog').open);
+    await settle(page);
     return value;
   };
   if (await page.locator('#bar-main').isVisible()) {

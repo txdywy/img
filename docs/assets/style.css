@@ -125,10 +125,16 @@ body.dragging::after {
 /* The date switch beside the frames heading: a big label, a switch drawn the way phone
    settings draw one, and the whole pill is the tap target. Its size never changes. */
 .panel-head.with-date #frame-title { margin-right: auto; }
+/* With large text or zoom the heading and the switch would not fit on one line, which
+   would push the frames down; then the heading says just 换相框 (set by app.js). */
+.panel-head.tight .title-tap { display: none; }
 .date-switch {
   position: relative; display: inline-flex; align-items: center; gap: .5rem; min-height: var(--tap); margin-left: auto; padding: .2rem .8rem .2rem .55rem;
   border: 1px solid var(--edge); border-radius: 2rem; background: var(--panel); color: var(--ink);
   font-size: 1.125rem; font-weight: 700; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  /* Taller than the heading so it is easy to tap, but it takes only the heading's height,
+     so showing it never pushes the frames down (the extra reaches into the margins). */
+  margin-top: calc((1.32rem * 1.4 - var(--tap)) / 2); margin-bottom: calc((1.32rem * 1.4 - var(--tap)) / 2);
 }
 .date-switch[hidden] { display: none; }
 .date-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
