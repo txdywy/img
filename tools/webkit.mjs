@@ -25,6 +25,22 @@ async function waitFor(page, check, arg, tries = 60) {
   return false;
 }
 
+// Waits until the page has stopped moving. After the first photo the page glides
+// (smooth scrolling) to put the frames under the preview, and on a busy machine that
+// takes longer than a fixed pause, so measure only once the page is still.
+const settle = page => page.evaluate(() => new Promise(resolve => {
+  let last = -1;
+  let still = 0;
+  const check = () => {
+    const now = window.scrollY;
+    still = now === last ? still + 1 : 0;
+    last = now;
+    if (still >= 6) setTimeout(resolve, 40);
+    else requestAnimationFrame(check);
+  };
+  requestAnimationFrame(check);
+}));
+
 async function photo(page) {
   const data = await page.evaluate(() => {
     const canvas = document.createElement('canvas');
@@ -76,6 +92,7 @@ for (const name of profiles) {
       continue;
     }
     await page.waitForTimeout(300);
+    await settle(page);
     const sideways = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     if (sideways > 0) errors.push(`${at}: the page scrolls sideways by ${sideways}px`);
     if (phone) {
