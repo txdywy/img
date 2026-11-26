@@ -1,8 +1,8 @@
-import {frames, categories, byId} from './frames.js?v=19';
-import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=19';
-import {setupAnalytics, track} from './analytics.js?v=19';
-import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=19';
-import {photoDate} from './photo-date.js?v=19';
+import {frames, categories, byId} from './frames.js?v=20';
+import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=20';
+import {setupAnalytics, track} from './analytics.js?v=20';
+import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=20';
+import {photoDate} from './photo-date.js?v=20';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -91,15 +91,20 @@ const captions = {
   birthday: {on: true, text: '生日快乐'},
   travel: {on: true, text: ''},
 };
-// The date on the frame, shared by every frame. Off until someone turns it on, except
-// on 出游纪念, which has always shown one. taken is the day the photo was taken (from
-// the photo itself), typed is a date someone wrote on 出游纪念 (empty: no date at all);
-// otherwise it is today.
-const stamp = {on: null, taken: null, typed: null};
+// The date on the frame, shared by every frame. Wanted: off until someone turns it on,
+// except on 出游纪念, which has always shown one. The date itself is one someone wrote
+// on 出游纪念 (typed; empty: no date at all), else the day the photo was taken (from the
+// photo itself), else today, but only once someone chose today for this photo (useToday):
+// a photo without a taken date never gets today printed on it by itself.
+// The sample photo shows today, as before.
+const stamp = {on: null, taken: null, typed: null, useToday: true};
 const todayParts = {year: today.getFullYear(), month: today.getMonth() + 1, day: today.getDate()};
-const stampOn = frame => stamp.on === null ? frame.caption === 'travel' : stamp.on;
+const stampWanted = frame => stamp.on === null ? frame.caption === 'travel' : stamp.on;
+const stampHasDate = () => stamp.typed !== null || Boolean(stamp.taken) || stamp.useToday;
+const stampOn = frame => stampWanted(frame) && stampHasDate();
 function stampText() {
   if (stamp.typed !== null) return stamp.typed.trim();
+  if (!stamp.taken && !stamp.useToday) return '';
   const {year, month, day} = stamp.taken || todayParts;
   return `${year}.${month}.${day}`;
 }
@@ -140,7 +145,9 @@ function showStatus(message, error = false, help = '') {
 }
 
 function showImportError(message, help = '') {
-  showStatus(message, true, help + (isUserPhoto ? ' 上一张照片还在，可以接着用。' : ''));
+  // The last photo is still in the preview, and 做好照片 would make that one: say so in sight.
+  if (isUserPhoto) showStatus('这张没打开，现在还是上一张。', true, `${message}${help} 想用上一张，接着做就行。`);
+  else showStatus(message, true, help);
   // Keep the message, the preview and the frames on screen together.
   showFrames();
 }
@@ -496,7 +503,10 @@ async function importPhoto(file) {
     setImage(photo);
     stamp.taken = taken;
     stamp.typed = null;
-    stampNote = '';
+    stamp.useToday = false;
+    // The date was wanted, but this photo does not say when it was taken: say so once,
+    // instead of printing today on it.
+    stampNote = !taken && stampWanted(selected) ? '这张没有拍照日期，先不印' : '';
     isUserPhoto = true;
     unsaved = true;
     savedNote = false;
@@ -507,10 +517,12 @@ async function importPhoto(file) {
     $('pick-text').textContent = '换一张照片';
     $('file-hint').textContent = '原照片还在';
     // On phones this message is only read out: the bar already says what to do next.
-    showStatus('照片已选好。');
+    showStatus(stampNote ? `照片已选好。${stampNote}。` : '照片已选好。');
     previewDirty = true;
     drawPreview();
     refreshGalleryPreviews();
+    // 改字 shows the new photo's date, not one written for the last photo.
+    syncCaption();
     syncStamp();
     if (first) showFrames();
     track('photo_selected');
@@ -888,9 +900,11 @@ function showResultHelp(hold, shareFirst) {
 }
 
 // Saved: say so in the window and keep saying it on the page after it closes.
-function markSaved(message, title = '✓ 照片已保存') {
+// Not sure (iPhone downloads ask once more, and the page never hears the answer):
+// the window says what to tap, and the page claims nothing afterwards.
+function markSaved(message, title = '✓ 照片已保存', sure = true) {
   unsaved = false;
-  savedNote = true;
+  savedNote = sure;
   madeNotSaved = false;
   $('result-title').textContent = title;
   $('result-close').textContent = '返回挑相框';
@@ -959,8 +973,9 @@ async function exportPhoto(opener) {
 
 download.addEventListener('click', () => {
   $('share-status').textContent = '';
-  markSaved(isApple ? '已存进「文件」App 的「下载项」。'
-    : isAndroid ? '已存进手机的「下载」，相册里一般也能看到。'
+  // iPhone and iPad Safari ask first whether to download, and say nothing back if not.
+  if (isApple) markSaved('点了「下载」，照片就存进「文件」App 的「下载项」。', '请在弹出的窗口里点「下载」', false);
+  else markSaved(isAndroid ? '已存进手机的「下载」，相册里一般也能看到。'
     : '已存进这台设备的「下载」文件夹。');
   $('download-text').textContent = '再存一次';
   track('photo_download_clicked');
@@ -998,9 +1013,12 @@ share.addEventListener('click', async () => {
     return;
   }
   sharePending = true;
+  // The answer belongs to this photo; one that comes back late must not mark a newer one.
+  const file = resultFile;
   try {
-    await navigator.share({files: [resultFile]});
+    await navigator.share({files: [file]});
     sharePending = false;
+    if (file !== resultFile) return;
     message.textContent = '';
     if (isApple) markSaved('如果选了「存储图像」，照片就在相册里了。', '✓ 好了');
     else {
@@ -1011,7 +1029,7 @@ share.addEventListener('click', async () => {
     track('photo_share_completed');
   } catch (error) {
     sharePending = false;
-    if (error && error.name === 'AbortError') return;
+    if (file !== resultFile || (error && error.name === 'AbortError')) return;
     if (isApple) {
       void shareStuck();
       return;
@@ -1117,7 +1135,8 @@ function syncCaption() {
   $('caption-text').value = state.text;
   $('caption-clear').disabled = !state.text;
   $('caption-date').value = stampText();
-  $('caption-date-row').hidden = !(kind === 'travel' && stampOn(selected));
+  // 出游纪念: a photo without a taken date can still get one written here.
+  $('caption-date-row').hidden = !(kind === 'travel' && stampWanted(selected));
   $('caption-fields').hidden = !state.on;
   $('words-summary').textContent = kind === 'travel' ? '写地点和日期' : '改相框上的祝福语';
 }
@@ -1162,6 +1181,8 @@ for (const id of ['caption-text', 'caption-date']) {
 // On 出游纪念 the date can be written by hand; it is the same date every frame shows.
 $('caption-date').addEventListener('input', event => {
   stamp.typed = event.target.value;
+  // A date written for a photo without one turns the switch on.
+  $('date-on').checked = stampOn(selected);
   markEdited();
   syncOptions();
   requestPreview();
@@ -1204,6 +1225,8 @@ function fitFrameHead() {
 
 $('date-on').addEventListener('change', event => {
   stamp.on = event.target.checked;
+  // Turned on for a photo without a taken date: the person chose today, and is told so.
+  if (stamp.on && !stampHasDate()) stamp.useToday = true;
   markEdited();
   syncCaption();
   syncOptions();
@@ -1212,7 +1235,7 @@ $('date-on').addEventListener('change', event => {
   const {year, month, day} = stamp.taken || todayParts;
   stampNote = !stamp.on ? '日期去掉了'
     : stamp.typed !== null ? (stampText() ? `印上了：${stampText()}` : '日期是空的，在「改字」里写上')
-    : stamp.taken ? `印上了拍照那天：${year}年${month}月${day}日` : '照片里没有拍照日期，先印上今天';
+    : stamp.taken ? `印上了拍照那天：${year}年${month}月${day}日` : '照片里没有拍照日期，印的是今天';
   showStatus(stampNote);
   track('date_toggled');
 });

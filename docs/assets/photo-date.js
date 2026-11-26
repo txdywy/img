@@ -15,12 +15,15 @@ function readDate(view, start, little, entry) {
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
-  // Cameras without a set clock write 0000:00:00 or the 1970s.
-  if (year < 1980 || year > new Date().getFullYear() + 1 || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  // Cameras without a set clock write 0000:00:00 or the first day of 1970. Old photos
+  // scanned with their real date (say 1976) are kept.
+  if (year < 1900 || year > new Date().getFullYear() + 1 || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  if (year === 1970 && month === 1 && day === 1) return null;
   return {year, month, day};
 }
 
-// Tags: 0x9003 taken, 0x9004 digitised (scans), 0x0132 last changed.
+// Only 0x9003, the moment the picture was taken. 0x9004 (digitised) is the day a scan
+// was made and 0x0132 the day the file was last changed: neither is the day to print.
 function readTiff(view, start) {
   const order = view.getUint16(start);
   const little = order === 0x4949;
@@ -35,13 +38,13 @@ function readTiff(view, start) {
       const entry = at + 2 + i * 12;
       const tag = view.getUint16(entry, little);
       if (tag === 0x8769) exif = view.getUint32(entry + 8, little);
-      else if (tag === 0x9003 || tag === 0x9004 || tag === 0x0132) found[tag] = readDate(view, start, little, entry);
+      else if (tag === 0x9003) found[tag] = readDate(view, start, little, entry);
     }
     return exif;
   };
   const exif = walk(view.getUint32(start + 4, little));
   if (exif) walk(exif);
-  return found[0x9003] || found[0x9004] || found[0x0132] || null;
+  return found[0x9003] || null;
 }
 
 // iOS 12 and 13 have no Blob.arrayBuffer(); FileReader works everywhere.

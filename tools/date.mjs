@@ -1,11 +1,11 @@
 // The date switch (加日期) and the date it prints on the frame:
 // - the switch shows only once one's own photo is in, beside 点一下，换相框, off by default;
 // - one tap prints the day the photo was taken (from its EXIF data) in the bottom border,
-//   and the bar says which day; a photo without one gets today, and the bar says so;
+//   and the bar says which day; a photo without one gets no date until the switch is
+//   tapped, then today, and the bar says so;
 // - turning it on or off never moves the preview box, the categories or the frames,
 //   never changes the picture's size, and leaves the photo itself untouched;
-// - 出游纪念 still shows a date before anyone touches the switch, and the switch says so;
-//   once turned off, no frame shows one;
+// - 出游纪念 still shows the day taken before anyone touches the switch, and the switch says so;
 // - the switch stays on one line and nothing scrolls sideways, on small phones, with
 //   large text, on tablets and on computers; the saved JPG carries the date.
 // Needs playwright and a Chromium (see smoke.mjs); ENGINE=webkit runs it in the engine
@@ -229,15 +229,14 @@ async function travel() {
   await settle(page);
   await page.locator('#frames button[data-frame="trip"]').click();
   await settle(page);
-  if (!(await page.locator('#date-on').isChecked())) errors.push(`${at}: 出游纪念 no longer shows its date by default`);
+  // A photo without a taken date never gets today by itself, not even on 出游纪念.
+  if (await page.locator('#date-on').isChecked()) errors.push(`${at}: 出游纪念 printed a date on a photo without one`);
   const label = await page.locator('#preview').getAttribute('aria-label');
   if (!label.includes('出游纪念')) errors.push(`${at}: 出游纪念 was not chosen (${label})`);
-  // Turning it off here turns it off everywhere; on again says today is used.
+  // One tap prints today and says so; it then follows every frame.
   await page.locator('#date-switch').click();
   await settle(page);
-  if (await page.locator('#date-on').isChecked()) errors.push(`${at}: the switch did not turn off on 出游纪念`);
-  await page.locator('#date-switch').click();
-  await settle(page);
+  if (!(await page.locator('#date-on').isChecked())) errors.push(`${at}: the switch did not turn on on 出游纪念`);
   const hint = await page.locator('#bar-hint').textContent();
   if (!hint.includes('今天')) errors.push(`${at}: a photo without a date did not say today is used (${JSON.stringify(hint)})`);
 

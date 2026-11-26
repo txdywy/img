@@ -100,7 +100,8 @@ async function round(page, at, mode, n) {
     const file = await download;
     if (!file) errors.push(`${where}: 下载 gave no file`);
     now = await state(page);
-    if (!now.title.includes('已保存')) errors.push(`${where}: after downloading the window says ${now.title}`);
+    // Safari asks once more and never tells the page, so the window only says what to tap.
+    if (!now.title.includes('点「下载」') || now.title.includes('已保存')) errors.push(`${where}: after downloading the window says ${now.title}`);
   } else if (mode === 'works') {
     if (!now.share) errors.push(`${where}: no 保存到相册 button`);
     else {
@@ -135,7 +136,7 @@ async function round(page, at, mode, n) {
     await page.locator('#result-download').click();
     if (!(await download)) errors.push(`${where}: 下载到文件 gave no file`);
     now = await state(page);
-    if (!now.title.includes('已保存')) errors.push(`${where}: after 下载到文件 the window says ${now.title}`);
+    if (!now.title.includes('点「下载」') || now.title.includes('已保存')) errors.push(`${where}: after 下载到文件 the window says ${now.title}`);
   }
   await page.locator('#result-close').click();
   await waitFor(page, () => !document.querySelector('#result-dialog').open);
