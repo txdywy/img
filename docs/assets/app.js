@@ -1,7 +1,7 @@
-import {frames, categories, byId} from './frames.js?v=16';
-import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=16';
-import {setupAnalytics, track} from './analytics.js?v=16';
-import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=16';
+import {frames, categories, byId} from './frames.js?v=17';
+import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=17';
+import {setupAnalytics, track} from './analytics.js?v=17';
+import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=17';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -52,7 +52,6 @@ let thumbSource = null;
 let isUserPhoto = false;
 let selected = frames[0];
 let options = {...defaults};
-const adjustmentHistory = [];
 let category = 'all';
 let expanded = false;
 let importVersion = 0;
@@ -158,8 +157,8 @@ function updateBar() {
   const hint = $('bar-hint');
   const pending = madeNotSaved && !resultDialog.open;
   hint.textContent = problem || (savedNote ? '✓ 已保存，还可以再换相框'
-    : pending ? `还没存好，再点「${make}」就能存`
-    : isUserPhoto ? (direct ? '点相框换样式，满意就保存' : `点相框换样式，满意就点「${make}」`)
+    : pending ? `还没存好，再点「${make}」`
+    : isUserPhoto ? '点相框，换个样式' 
     // Said before the first tap, for people who worry about their original photo.
     : '会另存一张，原照片还在');
   hint.classList.toggle('error', Boolean(problem));
@@ -386,8 +385,9 @@ more.addEventListener('click', () => {
   drawGallery();
   if (expanded && grid.children[listSize]) grid.children[listSize].focus();
   else {
+    // Collapsing shortens the page: glide back to the button instead of jumping.
     const rect = more.getBoundingClientRect();
-    if (rect.top < 0 || rect.bottom > window.innerHeight) more.scrollIntoView({block: 'center'});
+    if (rect.top < 0 || rect.bottom > window.innerHeight) glideBy(rect.top + rect.height / 2 - window.innerHeight / 2);
   }
 });
 
@@ -473,7 +473,6 @@ async function importPhoto(file) {
     savedNote = false;
     madeNotSaved = false;
     options = {...defaults};
-    adjustmentHistory.length = 0;
     syncOptions();
     $('preview-label').textContent = '我的照片';
     $('pick-text').textContent = '换一张照片';
@@ -590,7 +589,6 @@ function syncOptions() {
   $('position-x').hidden = !(crop && crop.x);
   $('position-y').hidden = !(crop && crop.y);
   stage.classList.toggle('can-pan', Boolean(crop));
-  $('undo').disabled = adjustmentHistory.length === 0;
   for (const button of $('position').querySelectorAll('button')) {
     const value = options[button.dataset.axis];
     const atEdge = Number(button.dataset.step) > 0 ? value >= 1 : value <= 0;
@@ -598,14 +596,8 @@ function syncOptions() {
   }
 }
 
-function remember(previous) {
-  adjustmentHistory.push(previous);
-  if (adjustmentHistory.length > 30) adjustmentHistory.shift();
-}
-
 function applyAdjustment(next) {
   if (Object.keys(next).every(key => next[key] === options[key])) return;
-  remember(options);
   options = {...options, ...next};
   redrawAdjustment();
 }
@@ -614,6 +606,8 @@ function applyAdjustment(next) {
 function markEdited() {
   if (!isUserPhoto) return;
   unsaved = true;
+  // "照片已选好" has done its job once something else happens.
+  if (!importProblem && !reading && status.textContent) showStatus('');
   if (savedNote || madeNotSaved) {
     savedNote = false;
     madeNotSaved = false;
@@ -678,11 +672,6 @@ document.addEventListener('keydown', event => {
     event.preventDefault();
     closeSheet(open);
   }
-});
-$('undo').addEventListener('click', () => {
-  options = adjustmentHistory.pop();
-  redrawAdjustment();
-  if ($('undo').disabled) $('rotate').focus();
 });
 
 // Drag the photo inside the frame when part of it is cropped. The preview allows
@@ -761,7 +750,6 @@ function endPan(event) {
     return;
   }
   if (start.x === options.x && start.y === options.y) return;
-  remember(start);
   redrawAdjustment();
 }
 preview.addEventListener('pointerup', endPan);
@@ -813,7 +801,7 @@ function holdToSave() {
 // What a long press offers is called differently on each phone and iOS version.
 function holdLead() {
   return longPressSave
-    ? `${isWeChat ? '在微信里' : '在这里'}：用手指按住下面的照片不放，选「保存图片」，就存进相册了。也可以选「发送给朋友」。`
+    ? '用手指按住下面的照片不放，选「保存图片」，就存进相册了。'
     : '用手指按住下面的照片不放，选「存储到“照片”」或「存储图像」，就存进相册了。也可以点「下载到文件」。';
 }
 
@@ -825,6 +813,10 @@ function showResult(opener) {
   // On iPhone and iPad, the share sheet is the direct way into Photos.
   const shareFirst = canShare && isApple && !longPressSave;
   share.hidden = !canShare;
+  // WeChat and the like cannot download, and the page cannot tell when a download
+  // fails there, so they get one way only: the long press.
+  download.hidden = longPressSave;
+  $('result-close').className = 'button secondary';
   share.className = `button ${shareFirst ? 'primary' : 'secondary'}`;
   download.className = `button ${shareFirst || hold ? 'secondary' : 'primary'}`;
   $('share-text').textContent = shareFirst ? '保存到相册' : '发给家人或其他应用';
@@ -842,7 +834,21 @@ function showResult(opener) {
   $('result-close').textContent = madeNotSaved ? '先不存，返回' : '返回挑相框';
   download.after(share);
   if (shareFirst) download.before(share);
+  showResultHelp(hold, shareFirst);
   openDialog(resultDialog, opener);
+}
+
+// The folded help under the window answers the question this way of saving raises.
+function showResultHelp(hold, shareFirst) {
+  const [title, text] = longPressSave
+    ? ['按住照片没反应？', '点右上角的「···」，选「在浏览器打开」（iPhone 上是「在 Safari 中打开」），再选一次照片，做好后保存。']
+    : hold ? ['按住照片没反应？', '点「下载到文件」，照片会存进「文件」App 的「下载项」。']
+    : shareFirst ? ['找不到照片？', '选了「存储图像」的，在「照片」App 里。点「下载到文件」存的，在「文件」App 的「下载项」里，名字以「拾光相框」开头。']
+    : isApple ? ['找不到照片？', '在「文件」App 的「下载项」里，名字以「拾光相框」开头。']
+    : ['找不到照片？', '在浏览器的「下载」里，或手机「文件管理」的「下载」文件夹里，名字以「拾光相框」开头。手机相册里一般也能看到。'];
+  $('result-help').open = false;
+  $('result-help-title').textContent = title;
+  $('result-help-text').textContent = text;
 }
 
 // Saved: say so in the window and keep saying it on the page after it closes.
@@ -852,6 +858,10 @@ function markSaved(message, title = '✓ 照片已保存') {
   madeNotSaved = false;
   $('result-title').textContent = title;
   $('result-close').textContent = '返回挑相框';
+  // Done: going back is the next step now; saving again stays possible but quieter.
+  $('result-close').className = 'button primary';
+  download.className = 'button secondary';
+  share.className = 'button secondary';
   const lead = $('result-lead');
   lead.textContent = message;
   lead.classList.add('saved');
@@ -913,9 +923,9 @@ async function exportPhoto(opener) {
 
 download.addEventListener('click', () => {
   $('share-status').textContent = '';
-  markSaved(isApple
-    ? `已存好。在「文件」App 的「下载项」里，名字是「${download.download}」。`
-    : `已存到这台设备的「下载」里，名字是「${download.download}」。手机相册里一般也能看到。`);
+  markSaved(isApple ? '已存进「文件」App 的「下载项」。'
+    : isAndroid ? '已存进手机的「下载」，相册里一般也能看到。'
+    : '已存进这台设备的「下载」文件夹。');
   $('download-text').textContent = '再存一次';
   track('photo_download_clicked');
 });
@@ -934,6 +944,7 @@ async function shareStuck() {
   $('result-lead').classList.remove('saved');
   download.className = 'button primary';
   $('download-text').textContent = '下载到文件';
+  showResultHelp(true, false);
   updateSave();
   track('photo_share_stuck');
   try {
@@ -1032,6 +1043,14 @@ function drawFramePreview(zoom) {
   return view;
 }
 
+// The enlarged picture can take 50 MB; iPhones cap all canvases together, so let it go on close.
+$('frame-dialog').addEventListener('close', () => {
+  const canvas = $('frame-preview');
+  canvas.width = 1;
+  canvas.height = 1;
+  zoomed = false;
+});
+
 // A tap on the picture zooms in and out too, the way photo apps do.
 $('frame-preview').addEventListener('click', () => drawFramePreview(!zoomed));
 
@@ -1060,6 +1079,7 @@ function syncCaption() {
   $('caption-text-label').textContent = labels.text;
   $('caption-text').placeholder = labels.placeholder;
   $('caption-text').value = state.text;
+  $('caption-clear').disabled = !state.text;
   $('caption-date').value = state.date || '';
   $('caption-date-row').hidden = kind !== 'travel';
   $('caption-fields').hidden = !state.on;
@@ -1084,8 +1104,25 @@ $('caption-text').addEventListener('input', event => {
   const kind = selected.caption;
   const shared = kind === 'travel' ? [kind] : Object.keys(captions).filter(item => item !== 'travel');
   for (const item of shared) captions[item].text = event.target.value;
+  $('caption-clear').disabled = !event.target.value;
   captionChanged(shared);
 });
+// The words come filled in; one tap clears them for one's own, instead of deleting letter by letter.
+$('caption-clear').addEventListener('click', () => {
+  const field = $('caption-text');
+  field.value = '';
+  field.dispatchEvent(new Event('input'));
+  field.focus();
+});
+// The keyboard's 完成 (Enter) key puts the keyboard away.
+for (const id of ['caption-text', 'caption-date']) {
+  $(id).addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.isComposing) {
+      event.preventDefault();
+      event.target.blur();
+    }
+  });
+}
 $('caption-date').addEventListener('input', event => {
   captions[selected.caption].date = event.target.value;
   captionChanged();
@@ -1154,7 +1191,13 @@ function layoutPage() {
   const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
   const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
   // Panoramas and long screenshots get a shorter box instead of empty space.
-  const natural = (stage.clientWidth - padX) / shape + padY;
+  let natural = (stage.clientWidth - padX) / shape + padY;
+  // On phones 调整, 改字 and 看大图 sit on the corners of the box. Over a normal photo
+  // they cover only the frame's corners, but a wide, low photo (a panorama) would
+  // disappear under them, so it gets a strip above and below for the buttons.
+  const tool = phoneLayout.matches && isUserPhoto ? $('adjust').firstElementChild.offsetHeight : 0;
+  // The frame's border makes the picture up to about 40% taller than such a photo.
+  if (tool && natural - padY < 10 * rem) natural = Math.max(natural, (natural - padY) * 1.4 + 2 * (tool + .6 * rem));
   if (!pinnedPhone.matches) stageWidth = 0;
   if (!phoneLayout.matches) {
     stage.style.height = '';
@@ -1212,7 +1255,18 @@ window.addEventListener('beforeunload', event => {
   event.returnValue = '';
 });
 
-$('help-open').addEventListener('click', event => openDialog($('help-dialog'), event.currentTarget));
+// The help names the buttons this device shows.
+function helpSave() {
+  const make = savesDirectly() ? '保存照片' : phoneLayout.matches ? '做好照片' : '做好这张照片';
+  $('help-save').textContent = savesDirectly() ? `满意了就点「${make}」，照片会存进手机的「下载」。`
+    : longPressSave ? `满意了就点「${make}」，再用手指按住照片，选「保存图片」。`
+    : isApple ? `满意了就点「${make}」，再按提示存进相册。`
+    : `满意了就点「${make}」，再点「下载照片」。`;
+}
+$('help-open').addEventListener('click', event => {
+  helpSave();
+  openDialog($('help-dialog'), event.currentTarget);
+});
 
 if ('ResizeObserver' in window) new ResizeObserver(fitPreview).observe(stage);
 else window.addEventListener('resize', fitPreview);
