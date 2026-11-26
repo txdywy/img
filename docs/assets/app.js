@@ -1,8 +1,8 @@
-import {frames, categories, byId} from './frames.js?v=20';
-import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=20';
-import {setupAnalytics, track} from './analytics.js?v=20';
-import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=20';
-import {photoDate} from './photo-date.js?v=20';
+import {frames, categories, byId} from './frames.js?v=21';
+import {fixedLayout, layout, layoutInBox, paint, photoRatio, placement} from './render.js?v=21';
+import {setupAnalytics, track} from './analytics.js?v=21';
+import {openDialog, pushLayer, releaseLayer} from './dialog.js?v=21';
+import {photoDate} from './photo-date.js?v=21';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -235,10 +235,20 @@ function fitPreview() {
   if (!image) return;
   const style = getComputedStyle(stage);
   const width = stage.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-  const height = stage.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+  let height = stage.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+  // On phones 调整 and 看大图 sit on the bottom corners of the box. The travel frame writes
+  // its place and date from its bottom-left corner, so there the frame stays above them.
+  // Only the picture moves up: the box keeps its size, so nothing else on the page moves.
+  let reserve = 0;
+  if (phoneLayout.matches && isUserPhoto && selected.caption === 'travel') {
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    reserve = Math.max(0, $('adjust').firstElementChild.offsetHeight + .65 * rem - parseFloat(style.paddingBottom));
+    height -= reserve;
+  }
   const scale = Math.max(0, Math.min(width / preview.width, height / preview.height));
   preview.style.width = `${preview.width * scale}px`;
   preview.style.height = `${preview.height * scale}px`;
+  preview.style.marginBottom = reserve ? `${reserve}px` : '';
 }
 
 function requestPreview() {
@@ -278,11 +288,15 @@ function makeButton(className, text) {
 // Each category shows how many frames it holds, so nobody misses the ones further down.
 for (const [id, name] of categories) {
   const count = id === 'all' ? frames.length : frames.filter(frame => frame.category === id).length;
-  const button = makeButton('filter', name);
+  const button = makeButton('filter', '');
+  // Name and count each stay whole; with very large text the count goes under the name.
+  const label = document.createElement('span');
+  label.className = 'name';
+  label.textContent = name;
   const number = document.createElement('span');
   number.className = 'count';
   number.textContent = String(count);
-  button.append(' ', number);
+  button.append(label, ' ', number);
   button.setAttribute('aria-label', `${name}，${count} 款`);
   button.dataset.category = id;
   button.setAttribute('aria-pressed', String(id === category));
@@ -973,10 +987,12 @@ async function exportPhoto(opener) {
 
 download.addEventListener('click', () => {
   $('share-status').textContent = '';
-  // iPhone and iPad Safari ask first whether to download, and say nothing back if not.
+  // A browser may ask first (iPhone Safari always does, many Android browsers and some
+  // computers too), may be told to block downloads, and never tells the page what
+  // happened. So the window says what to tap if asked, and the page claims nothing.
   if (isApple) markSaved('点了「下载」，照片就存进「文件」App 的「下载项」。', '请在弹出的窗口里点「下载」', false);
-  else markSaved(isAndroid ? '已存进手机的「下载」，相册里一般也能看到。'
-    : '已存进这台设备的「下载」文件夹。');
+  else markSaved(isAndroid ? '会存进手机的「下载」，相册里一般也能看到。如果浏览器问要不要下载，请点「下载」。'
+    : '会存进这台设备的「下载」文件夹。如果浏览器问存到哪里，点「保存」。', '照片开始下载了', false);
   $('download-text').textContent = '再存一次';
   track('photo_download_clicked');
 });

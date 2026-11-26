@@ -2,7 +2,7 @@
 // large-text phones, zoomed pages, tablets and computers:
 // - after choosing a photo, a whole frame card shows between the pinned preview and the bottom bar;
 // - tapping a category shows that category's frames (the words box no longer pushes them away);
-// - saving says "已保存" on the page afterwards;
+// - downloading never claims "已保存" (no browser tells the page whether it was kept);
 // - the adjust and words sheets close with Back, Esc or a tap outside, and their button stays in sight;
 // - an unreadable photo gives one short sentence and one way on, not a wall of text;
 // - category chips have visible outlines; nothing wraps in the bottom bar or scrolls sideways;
@@ -356,7 +356,9 @@ async function phoneFlow(setup, photos) {
   }
   await settle(page);
 
-  // 3. Saving: Android phones download at once, and the page says it is saved afterwards.
+  // 3. Saving: Android phones download at once. A browser can ask first or block the
+  // download without telling the page, so the window says what to tap if asked and
+  // the page never claims the photo is saved.
   const download = page.waitForEvent('download', {timeout: 8000}).catch(() => null);
   await page.locator('#bar-main').click();
   await page.locator('#result-dialog').waitFor({state: 'visible'});
@@ -367,9 +369,9 @@ async function phoneFlow(setup, photos) {
     if (bytes.length < 10_000 || bytes[0] !== 0xff || bytes[1] !== 0xd8) errors.push(`${at}: download is not a JPG`);
   }
   const lead = await page.locator('#result-lead').innerText();
-  if (!lead.includes('已存进')) errors.push(`${at}: the result window does not say where the photo went (${lead})`);
+  if (!lead.includes('下载') || !lead.includes('如果浏览器问')) errors.push(`${at}: the result window does not say where the photo goes and what to tap if asked (${lead})`);
   const title = await page.locator('#result-title').innerText();
-  if (!title.includes('已保存')) errors.push(`${at}: after saving, the window title says ${title}`);
+  if (!title.includes('开始下载') || title.includes('已保存')) errors.push(`${at}: after the download started, the window title says ${title}`);
   // Saved: 返回挑相框 is the main button and in sight without scrolling; 再存一次 is the quiet one.
   const saved = await page.evaluate(() => {
     const close = document.querySelector('#result-close');
@@ -385,14 +387,8 @@ async function phoneFlow(setup, photos) {
   if (!(await waitFor(page, () => !document.querySelector('#result-dialog').open))) errors.push(`${at}: Back did not close the result window`);
   await settle(page);
   const hint = await page.locator('#bar-hint').innerText();
-  if (!hint.includes('已保存')) errors.push(`${at}: no 已保存 note after saving (${hint})`);
+  if (hint.includes('已保存') || hint.includes('还没存好')) errors.push(`${at}: the bar guesses whether the download was kept (${hint})`);
   await shoot(page, setup, '7-saved');
-  const other = page.locator('#frames button[aria-pressed="false"]').first();
-  await other.scrollIntoViewIfNeeded();
-  await other.click();
-  if (!(await waitFor(page, () => !document.querySelector('#bar-hint').textContent.includes('已保存')))) {
-    errors.push(`${at}: 已保存 stays after changing the frame`);
-  }
 
   // 7. An unreadable file: one sentence, one way on, how-to folded away.
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -481,19 +477,93 @@ async function wideFlow(setup, photos) {
   await page.locator('#result-download').click();
   await download;
   title = await page.locator('#result-title').innerText();
-  // iPad Safari asks once more whether to download and never tells the page: the window
-  // says what to tap there and the page claims nothing. Elsewhere the download is saved.
+  // No browser tells the page whether the download was kept (iPad Safari asks once more,
+  // others may ask where to save or block it): the window says what to tap if asked and
+  // the page claims nothing.
   const ipad = await page.evaluate(() => /iPhone|iPad|iPod/.test(navigator.userAgent)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
-  if (ipad ? !title.includes('点「下载」') || title.includes('已保存') : !title.includes('已保存')) {
-    errors.push(`${at}: after saving, the window title says ${title}`);
+  if ((ipad ? !title.includes('点「下载」') : !title.includes('开始下载')) || title.includes('已保存')) {
+    errors.push(`${at}: after the download started, the window title says ${title}`);
   }
   await page.locator('#result-close').click();
   await settle(page);
   const hint = await page.locator('#save-hint').innerText();
-  if (ipad ? hint.includes('已保存') : !hint.includes('已保存')) errors.push(`${at}: after saving the page says ${hint}`);
+  if (hint.includes('已保存') || hint.includes('还没存好')) errors.push(`${at}: after the download started the page says ${hint}`);
+  // The help names the buttons this layout shows.
+  await page.locator('#help-open').click();
+  const help = await page.locator('#help-dialog ol').innerText();
+  if (!help.includes('「调整照片」') || !help.includes('「做好这张照片」')) errors.push(`${at}: the help names other buttons (${help})`);
+  await page.keyboard.press('Escape');
   await shoot(page, setup, '2-saved');
   await commonChecks(page, at);
+  await page.close();
+}
+
+// Very large text on narrow phones (200% text at 375 and 320 wide): nothing is cut off.
+// Category names and counts stay inside their chips, both bar buttons show their whole
+// words, the save window shows its title and its buttons' words on one line each.
+async function largeTextFlow(setup, photos) {
+  const at = setup.name;
+  const page = await open({...setup, phone: true});
+  if (!(await importPhoto(page, photos.portrait))) errors.push(`${at}: the photo did not open`);
+  const spill = await page.evaluate(() => [...document.querySelectorAll('#filters button, #bar-pick, #bar-main')]
+    .filter(el => el.offsetParent)
+    .filter(el => {
+      const box = el.getBoundingClientRect();
+      return el.scrollWidth > el.clientWidth + 1 || [...el.querySelectorAll('span')].some(part => {
+        const r = part.getBoundingClientRect();
+        return r.width && (r.left < box.left - 1 || r.right > box.right + 1);
+      });
+    }).map(el => el.textContent.trim()));
+  if (spill.length) errors.push(`${at}: words run out of their buttons: ${spill.join(', ')}`);
+  const bar = await page.evaluate(() => ['#bar-pick', '#bar-main'].map(id => document.querySelector(id).getBoundingClientRect())
+    .every(r => r.left >= -1 && r.right <= window.innerWidth + 1));
+  if (!bar) errors.push(`${at}: a bar button is cut off at the screen's edge`);
+  await shoot(page, setup, '1-picked');
+  await page.locator('#bar-main').click();
+  await page.locator('#result-dialog').waitFor({state: 'visible'});
+  await page.evaluate(() => document.querySelector('#result-dialog .dialog-inner').scrollTo(0, 0));
+  const result = await page.evaluate(() => {
+    const title = document.querySelector('#result-title').getBoundingClientRect();
+    const broken = [...document.querySelectorAll('#result-dialog .result-actions .button')].filter(el => el.offsetParent)
+      .filter(el => {
+        const text = el.querySelector('span') || el;
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        return new Set([...range.getClientRects()].map(r => Math.round(r.top))).size > 1 || el.scrollWidth > el.clientWidth + 1;
+      }).map(el => el.textContent.trim());
+    return {titleSeen: title.height > 0 && title.top >= 0 && title.bottom <= window.innerHeight, broken};
+  });
+  if (!result.titleSeen) errors.push(`${at}: the save window's title is out of sight`);
+  if (result.broken.length) errors.push(`${at}: save window buttons break their words: ${result.broken.join(', ')}`);
+  for (const id of ['#result-download', '#result-close']) {
+    const box = await page.locator(id).boundingBox();
+    if (!box || box.y < 0 || box.y + box.height > setup.viewport.height + 1) errors.push(`${at}: ${id} is off screen in the save window`);
+  }
+  await shoot(page, setup, '2-result');
+  await commonChecks(page, at);
+  await page.close();
+}
+
+// The travel frame writes its place and date from its bottom-left corner: on phones
+// 调整 and 看大图 sit on the preview's bottom corners and must not cover them.
+async function travelWordsFlow(setup, photos) {
+  const at = setup.name;
+  const page = await open({...setup, phone: true});
+  if (!(await importPhoto(page, photos.landscape))) errors.push(`${at}: the photo did not open`);
+  const trip = page.locator('#frames button[data-frame="trip"]');
+  await trip.scrollIntoViewIfNeeded();
+  await trip.click();
+  await settle(page);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await settle(page);
+  const covered = await page.evaluate(() => {
+    const photo = document.querySelector('#preview').getBoundingClientRect();
+    return ['#adjust > summary', '#dock-view'].map(id => document.querySelector(id).getBoundingClientRect())
+      .filter(r => r.height > 0 && r.top < photo.bottom - 1 && r.right > photo.left && r.left < photo.right).length;
+  });
+  if (covered) errors.push(`${at}: ${covered} buttons cover the bottom of the travel frame, where its words are`);
+  await shoot(page, setup, '1-travel');
   await page.close();
 }
 
@@ -626,6 +696,22 @@ try {
     {name: 'iphone-15-393x852', viewport: {width: 393, height: 852}, scale: 3}]) {
     try {
       await iPhoneFlow(setup, photos);
+    } catch (error) {
+      errors.push(`${setup.name}: test stopped: ${String(error.message || error).split('\n')[0]}`);
+    }
+  }
+  for (const setup of [{name: '375x667-text200', viewport: {width: 375, height: 667}, font: 32},
+    {name: '320x568-text200', viewport: {width: 320, height: 568}, font: 32}]) {
+    try {
+      await largeTextFlow(setup, photos);
+    } catch (error) {
+      errors.push(`${setup.name}: test stopped: ${String(error.message || error).split('\n')[0]}`);
+    }
+  }
+  for (const setup of [{name: 'travel-390x844', viewport: {width: 390, height: 844}},
+    {name: 'travel-320x568', viewport: {width: 320, height: 568}}]) {
+    try {
+      await travelWordsFlow(setup, photos);
     } catch (error) {
       errors.push(`${setup.name}: test stopped: ${String(error.message || error).split('\n')[0]}`);
     }
